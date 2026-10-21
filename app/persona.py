@@ -18,7 +18,7 @@ OPTIONS = {
 LIMITS = {"name": 20, "job": 30, "memo": 300, "tag": 20, "tags": 6, "traits": 3}
 
 DEFAULT_CHARACTER = {
-    "name": "하루",
+    "name": "해피",
     "gender": "여성",
     "age_group": "20대",
     "job": "대학원생",
