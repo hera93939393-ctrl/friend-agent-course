@@ -205,10 +205,24 @@ textarea.input{min-height:80px;resize:vertical}
   --yel:#F5EB9A; --lav:#CFC0F6; --mint:#D7F5E4;
   --radius:18px; --shadow:none;
 }
-body{font-family:"Dongle","Pretendard Variable",sans-serif;font-size-adjust:ex-height .53;line-height:1.35}
-.panel,.panel *{font-size-adjust:none}
-.panel{font-family:"Pretendard Variable",Pretendard,sans-serif}
-.brand{font-size:24px;font-weight:700}
+/* 동글은 글자가 작게 그려져서 크기를 직접 키운다(자동 확대는 이모지까지 키워 줄이 겹침) */
+/* 이모지만 80% 크기로: 이모지 영역 글자에만 쓰이는 별도 글꼴 이름 */
+@font-face{font-family:"HappyEmoji";src:local("Segoe UI Emoji"),local("Apple Color Emoji"),local("Noto Color Emoji");unicode-range:U+1F000-1FAFF,U+2600-27BF,U+2B00-2BFF,U+FE0F,U+200D;size-adjust:80%}
+/* --fs: 글씨 배율. 숫자 하나로 전체 글씨 크기를 조절한다 */
+:root{--fs:1.5}
+body{font-family:"HappyEmoji","Dongle","Pretendard Variable",sans-serif;font-size:calc(21px*var(--fs));line-height:1.3}
+.panel{font-family:"Pretendard Variable",Pretendard,sans-serif;font-size:13.5px;line-height:1.6}
+.bubble{font-size:calc(23px*var(--fs));line-height:1.45}
+.who .name{font-size:calc(28px*var(--fs))}.who .sub{font-size:calc(18px*var(--fs))}.chip{font-size:calc(17px*var(--fs))}
+.nav button{font-size:calc(22px*var(--fs))}.nav .count{font-size:calc(17px*var(--fs))}
+.account,.account *{font-size:calc(18px*var(--fs))!important}
+.btn{font-size:calc(20px*var(--fs))}.topbar .t{font-size:calc(24px*var(--fs))}.topbar .s,.ai-badge{font-size:calc(17px*var(--fs))}
+.note,.day{font-size:calc(18px*var(--fs))}.report{font-size:calc(17px*var(--fs))}.suggest button{font-size:calc(19px*var(--fs))}
+.box textarea{font-size:calc(22px*var(--fs));line-height:1.25}
+.page h2{font-size:calc(32px*var(--fs))}.page .lead,.empty{font-size:calc(20px*var(--fs))}.card h3{font-size:calc(23px*var(--fs))}
+.field label{font-size:calc(20px*var(--fs))}.field .hint{font-size:calc(17px*var(--fs))}.input{font-size:calc(20px*var(--fs))}
+.seg button,.tags span{font-size:calc(19px*var(--fs))}.item{font-size:calc(20px*var(--fs))}.item .k{font-size:calc(16px*var(--fs))}.item .x,.saved{font-size:calc(18px*var(--fs))}
+.brand{font-size:calc(30px*var(--fs));font-weight:700}
 .brand i{width:14px;height:14px;background:var(--accent);border:2px solid var(--ink)}
 .side{background:var(--yel);border-right:2px solid var(--ink)}
 .who{background:#fff;border:2px solid var(--ink)}
