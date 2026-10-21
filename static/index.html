@@ -398,9 +398,20 @@ let cfg, sb = null, token = null, me = null, character = null, options = null, b
 if (document.querySelector(".banner")) document.body.classList.add("has-banner");
 
 // ── 로그인과 API 호출 ─────────────────────────────────────────
+// AUTH=guest 일 때 이 브라우저의 손님 번호. 저장소를 못 쓰는 브라우저면 이번 창에서만 쓴다.
+const guestId = (() => {
+  const make = () => (crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join(""));
+  try {
+    let id = localStorage.getItem("happy-guest-id");
+    if (!id) { id = make(); localStorage.setItem("happy-guest-id", id); }
+    return id;
+  } catch { return make(); }
+})();
+
 async function api(path, opts = {}) {
   const headers = {"Content-Type": "application/json", ...(opts.headers || {})};
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (cfg?.auth === "guest") headers["X-Guest-Id"] = guestId;
   const r = await fetch(path, {...opts, headers});
   if (!r.ok && !opts.raw) throw new Error(`${r.status} ${await r.text()}`);
   return opts.raw ? r : r.json();
@@ -432,6 +443,11 @@ async function logout() { await sb.auth.signOut(); location.reload(); }
 
 function renderAccount() {
   const el = $("#account");
+  if (cfg.auth === "guest") {
+    el.innerHTML = `<div class="id"><span class="dot on"></span>손님으로 사용 중</div>
+      <div class="mute" style="color:var(--ink-3);font-size:12px">이 브라우저만의 캐릭터와 대화예요. 저장소: ${cfg.storage === "memory" ? "서버 메모리 (재배포하면 사라짐)" : cfg.storage}</div>`;
+    return;
+  }
   if (cfg.auth !== "supabase") {
     el.innerHTML = `<div class="id"><span class="dot"></span>로그인 없음 (개발용 사용자)</div>
       <div class="mute" style="color:var(--ink-3);font-size:12px">저장소: ${cfg.storage === "memory" ? "서버 메모리 (재배포하면 사라짐)" : cfg.storage}</div>`;
@@ -603,7 +619,9 @@ $("#photoInput").onchange = async () => {
   form.append("photo", file);
   $("#input").placeholder = "사진에서 글자를 읽는 중…";
   try {
-    const r = await fetch("/api/ocr", {method: "POST", body: form, headers: token ? {Authorization: `Bearer ${token}`} : {}});
+    const headers = token ? {Authorization: `Bearer ${token}`} : {};
+    if (cfg.auth === "guest") headers["X-Guest-Id"] = guestId;
+    const r = await fetch("/api/ocr", {method: "POST", body: form, headers});
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || r.status);
     $("#input").value = `사진에서 읽은 글이야. 여기 있는 일정 중에 알려 줘야 할 게 있으면 약속으로 저장해 줘.\n${data.text}`;

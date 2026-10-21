@@ -84,8 +84,8 @@ def load_settings():
 
     if storage not in ("memory", "supabase"):
         stop(f"STORAGE 값 '{storage}' 를 알 수 없습니다. memory 또는 supabase 를 쓰세요.")
-    if auth not in ("none", "supabase"):
-        stop(f"AUTH 값 '{auth}' 를 알 수 없습니다. none 또는 supabase 를 쓰세요.")
+    if auth not in ("none", "guest", "supabase"):
+        stop(f"AUTH 값 '{auth}' 를 알 수 없습니다. none, guest, supabase 중 하나를 쓰세요.")
     if storage == "supabase" and auth != "supabase":
         stop("STORAGE=supabase 는 AUTH=supabase 와 함께 써야 합니다. 로그인 없이 DB에 저장하면 모든 사용자의 데이터가 한 사람 것으로 섞입니다.")
     if auth == "supabase" and not (supabase_url and publishable):
