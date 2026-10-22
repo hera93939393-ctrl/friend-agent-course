@@ -1,9 +1,13 @@
 """요청을 보낸 사용자 확인하기.
 
 - AUTH=none: 로그인 없이 모든 요청을 개발용 사용자 한 명으로 본다. 노트북과 첫 배포용이다.
+- AUTH=guest: 화면이 브라우저마다 임의의 손님 번호를 만들어 X-Guest-Id 헤더로 보내고, 서버는 번호별로 사용자를 나눈다.
+  번호를 확인할 방법이 없어 남의 번호를 알면 그 사람 데이터를 볼 수 있다. 여러 사람이 써 보는 연습용이며,
+  실제 서비스는 AUTH=supabase 를 쓴다.
 - AUTH=supabase: 화면이 Supabase Auth로 로그인(익명 또는 구글)하고 받은 access token을 요청마다 보낸다.
   서버는 그 토큰을 Supabase Auth에 물어 확인하고 user_id 를 얻는다. 확인한 user_id 만 저장소 조회에 쓴다.
 """
+import re
 import time
 from dataclasses import dataclass
 
@@ -14,6 +18,7 @@ from app.logs import log
 
 LOCAL_USER = "local-user"
 CACHE_SECONDS = 300
+GUEST_ID = re.compile(r"^[A-Za-z0-9-]{16,64}$")
 
 
 @dataclass
@@ -33,6 +38,11 @@ class Auth:
     def __call__(self, request: Request) -> User:
         if self.mode == "none":
             return User(LOCAL_USER, anonymous=True)
+        if self.mode == "guest":
+            guest = request.headers.get("x-guest-id", "").strip()
+            if not GUEST_ID.match(guest):
+                raise HTTPException(400, "손님 번호가 없거나 올바르지 않습니다")
+            return User(f"guest-{guest}", anonymous=True)
         header = request.headers.get("authorization", "")
         if not header.lower().startswith("bearer "):
             raise HTTPException(401, "로그인이 필요합니다")

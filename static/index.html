@@ -3,8 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>하루친구</title>
+<title>해피</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dongle:wght@400;700&display=swap">
 <style>
 :root{
   --bg:#f5f3ef; --surface:#ffffff; --surface-2:#faf9f7; --line:#e8e4dd; --line-2:#d9d3c9;
@@ -193,16 +195,87 @@ textarea.input{min-height:80px;resize:vertical}
   .grid{grid-template-columns:1fr}
   .bubble{max-width:84%}
 }
+
+/* ── 해피 테마: 파스텔 벤토 + 동글 글꼴 ───────────────────────── */
+:root{
+  --bg:#FFFDF8; --surface:#ffffff; --surface-2:#F7F3E8; --line:#1A1A1A; --line-2:#1A1A1A;
+  --ink:#1A1A1A; --ink-2:#3D3A35; --ink-3:#6B665D;
+  --accent:#5FD38D; --accent-ink:#1A1A1A; --accent-soft:#D7F5E4;
+  --mine:#CFC0F6; --mine-ink:#1A1A1A; --theirs:#ffffff;
+  --yel:#F5EB9A; --lav:#CFC0F6; --mint:#D7F5E4;
+  --radius:18px; --shadow:none;
+}
+/* 동글은 글자가 작게 그려져서 크기를 직접 키운다(자동 확대는 이모지까지 키워 줄이 겹침) */
+/* 이모지만 80% 크기로: 이모지 영역 글자에만 쓰이는 별도 글꼴 이름 */
+@font-face{font-family:"HappyEmoji";src:local("Segoe UI Emoji"),local("Apple Color Emoji"),local("Noto Color Emoji");unicode-range:U+1F000-1FAFF,U+2600-27BF,U+2B00-2BFF,U+FE0F,U+200D;size-adjust:80%}
+/* --fs: 글씨 배율. 숫자 하나로 전체 글씨 크기를 조절한다 */
+:root{--fs:1.5}
+body{font-family:"HappyEmoji","Dongle","Pretendard Variable",sans-serif;font-size:calc(21px*var(--fs));line-height:1.3}
+.panel{font-family:"Pretendard Variable",Pretendard,sans-serif;font-size:13.5px;line-height:1.6}
+.bubble{font-size:calc(23px*var(--fs));line-height:1.45}
+.who .name{font-size:calc(28px*var(--fs))}.who .sub{font-size:calc(18px*var(--fs))}.chip{font-size:calc(17px*var(--fs))}
+.nav button{font-size:calc(22px*var(--fs))}.nav .count{font-size:calc(17px*var(--fs))}
+.account,.account *{font-size:calc(18px*var(--fs))!important}
+.btn{font-size:calc(20px*var(--fs))}.topbar .t{font-size:calc(24px*var(--fs))}.topbar .s,.ai-badge{font-size:calc(17px*var(--fs))}
+.note,.day{font-size:calc(18px*var(--fs))}.report{font-size:calc(17px*var(--fs))}.suggest button{font-size:calc(19px*var(--fs))}
+.box textarea{font-size:calc(22px*var(--fs));line-height:1.25}
+.page h2{font-size:calc(32px*var(--fs))}.page .lead,.empty{font-size:calc(20px*var(--fs))}.card h3{font-size:calc(23px*var(--fs))}
+.field label{font-size:calc(20px*var(--fs))}.field .hint{font-size:calc(17px*var(--fs))}.input{font-size:calc(20px*var(--fs))}
+.seg button,.tags span{font-size:calc(19px*var(--fs))}.item{font-size:calc(20px*var(--fs))}.item .k{font-size:calc(16px*var(--fs))}.item .x,.saved{font-size:calc(18px*var(--fs))}
+.brand{font-size:calc(30px*var(--fs));font-weight:700}
+.brand i{width:14px;height:14px;background:var(--accent);border:2px solid var(--ink)}
+.side{background:var(--yel);border-right:2px solid var(--ink)}
+.who{background:#fff;border:2px solid var(--ink)}
+.who .ava{width:88px;height:88px;background:transparent;border:0;border-radius:0}
+.topbar{background:#fff;border-bottom:2px solid var(--ink);backdrop-filter:none}
+.topbar .ava{width:46px;height:46px;background:transparent;border:0;border-radius:0}
+.row .ava{width:42px;height:42px;background:transparent;border:0;border-radius:0}
+.ava svg{width:100%;height:100%;display:block}
+.chip{background:var(--lav);border:2px solid var(--ink);color:var(--ink)}
+.nav button{border:2px solid transparent}
+.nav button.on{background:#fff;border-color:var(--ink);color:var(--ink)}
+.nav button:hover{background:rgba(255,255,255,.6)}
+.account{border-top:2px dashed var(--ink)}
+.chat{background:repeating-linear-gradient(0deg,var(--bg) 0 30px,#F4F1E8 30px 31px)}
+.row.them .bubble{border:2px solid var(--ink)}
+.row.me .bubble{border:2px solid var(--ink)}
+.bubble.safety{background:var(--yel)}
+.day{border:2px solid var(--ink);background:#fff}
+.suggest button{border:2px solid var(--ink);color:var(--ink)}
+.suggest button:hover{background:var(--mint);border-color:var(--ink);color:var(--ink)}
+.box{border:2px solid var(--ink)}
+.box:focus-within{border-color:var(--ink);outline:3px solid var(--mint)}
+.send{background:var(--accent);color:var(--ink);border:2px solid var(--ink);border-radius:999px}
+.photo{border:2px solid var(--ink);background:var(--mint);border-radius:999px}
+.ai-badge,.menu-btn,.panel-btn{border:2px solid var(--ink)}
+.btn{border:2px solid var(--ink);border-radius:999px}
+.btn.primary{background:var(--accent);border-color:var(--ink);color:var(--ink)}
+.btn.ghost{border-color:transparent}
+.card{border:2px solid var(--ink)}
+.card:nth-of-type(3n+1){background:#fff}
+.card:nth-of-type(3n+2){background:#FFFEF2}
+.input,.tags{border:2px solid var(--ink)}
+.input:focus{outline:3px solid var(--mint);border-color:var(--ink)}
+.seg button{border:2px solid var(--ink)}
+.seg button.on{background:var(--accent);border-color:var(--ink);color:var(--ink)}
+.avatars button{width:68px;height:68px;padding:4px;border:2px solid var(--ink);border-radius:16px}
+.avatars button svg{pointer-events:none}
+.avatars button.on{border:3px solid var(--ink);background:var(--accent-soft);outline:3px solid var(--accent);outline-offset:1px}
+.tags span{border:2px solid var(--ink);background:var(--lav)}
+.item{border-top:2px dashed #CFC0F6}
+.item .k{border:2px solid var(--ink);background:var(--yel);color:var(--ink)}
+.note.mem{background:var(--mint);color:#1F4D4A;border:2px solid var(--ink)}
+.note.rem{background:var(--lav);color:#2B2160;border:2px solid var(--ink)}
 </style>
 </head>
 <body>
 <!--ENV_BANNER-->
 <div class="app" id="app">
   <aside class="side" id="side">
-    <div class="brand"><i></i>하루친구</div>
+    <div class="brand"><i></i>해피</div>
     <div class="who">
       <div class="ava" id="sideAva">🐻</div>
-      <div class="name" id="sideName">하루</div>
+      <div class="name" id="sideName">해피</div>
       <div class="sub" id="sideSub"></div>
       <div class="chips" id="sideChips"></div>
     </div>
@@ -219,7 +292,7 @@ textarea.input{min-height:80px;resize:vertical}
     <header class="topbar">
       <button class="menu-btn" id="menuBtn">☰</button>
       <div class="ava" id="topAva">🐻</div>
-      <div><div class="t" id="topName">하루</div><div class="s" id="topSub">대화</div></div>
+      <div><div class="t" id="topName">해피</div><div class="s" id="topSub">대화</div></div>
       <span class="ai-badge">AI 캐릭터와의 대화입니다</span>
       <button class="panel-btn" id="panelBtn">이번 턴</button>
     </header>
@@ -298,13 +371,47 @@ const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&
 const SUGGEST = ["내일 날씨 어때?", "오늘 미세먼지 어때?", "다음 공휴일 언제야?", "내일 아침 8시에 물 마시라고 알려 줘", "내 약속 뭐 있어?", "내 이름은 지수야. 고양이를 좋아해"];
 const THRESHOLD = 0.6;
 
+// ── 손그림 아바타: 저장 값은 이모지 그대로 두고 화면에서만 그림으로 바꾼다 ──
+const AVA_SVG = (() => {
+  const K = "#3A2E2A", S = `stroke="${K}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"`;
+  const HP = "M32 15C47 15 56 25 56 37C56 49 46 56 32 56C18 56 8 49 8 37C8 25 17 15 32 15Z";
+  const head = f => `<path d="${HP}" fill="${f}" ${S}/><path d="${HP}" fill="none" stroke="${K}" stroke-width="1" opacity=".3" transform="translate(.9 .6)"/>`;
+  const eye = (x, y) => `<ellipse cx="${x}" cy="${y}" rx="3" ry="3.6" fill="${K}"/><circle cx="${x + 1.1}" cy="${y - 1.4}" r="1.2" fill="#fff"/>`;
+  const eyes = (y = 37) => eye(24, y) + eye(40, y);
+  const blush = `<ellipse cx="18.5" cy="43" rx="4.2" ry="2.6" fill="#FF9FB2" opacity=".75"/><ellipse cx="45.5" cy="43" rx="4.2" ry="2.6" fill="#FF9FB2" opacity=".75"/><path d="M16.5 42.5l1-1.4M19 42.6l1-1.4M43.5 42.5l1-1.4M46 42.6l1-1.4" stroke="#E0607A" stroke-width="1" stroke-linecap="round"/>`;
+  const w = (y = 42) => `<path d="M28 ${y}Q30 ${y + 3} 32 ${y}Q34 ${y + 3} 36 ${y}" fill="none" ${S} stroke-width="2.2"/>`;
+  const art = {
+    "🐻": `<circle cx="15" cy="20" r="7.5" fill="#E2B07E" ${S}/><circle cx="15" cy="20" r="3.5" fill="#F7D7B5"/><circle cx="49" cy="20" r="7.5" fill="#E2B07E" ${S}/><circle cx="49" cy="20" r="3.5" fill="#F7D7B5"/>${head("#EDC394")}<ellipse cx="32" cy="45" rx="8" ry="6" fill="#FBE7CF" ${S} stroke-width="2"/>${eyes(36)}<path d="M29.6 42Q32 40.3 34.4 42Q32 44.3 29.6 42Z" fill="${K}"/>${w(45)}${blush}`,
+    "🐱": `<path d="M12 29L13 9L27 18" fill="#FFE98A" ${S}/><path d="M15 15L16 22L21 19" fill="#FFB8C6"/><path d="M52 29L51 9L37 18" fill="#FFE98A" ${S}/><path d="M49 15L48 22L43 19" fill="#FFB8C6"/>${head("#FFE98A")}<path d="M22 19Q24 23 26 19M30 18Q32 22 34 18" fill="none" stroke="#E0B84A" stroke-width="2" stroke-linecap="round"/>${eyes()}<path d="M30.6 40.5L32 42L33.4 40.5Z" fill="#E0607A" ${S} stroke-width="1.4"/>${w(42)}<path d="M5 39L15 40M6 44L15 43M59 39L49 40M58 44L49 43" ${S} stroke-width="1.8"/>${blush}`,
+    "🦊": `<path d="M11 30L10 7L28 18" fill="#FFA46B" ${S}/><path d="M14 13L15 22L21 19" fill="#FFF3E6"/><path d="M53 30L54 7L36 18" fill="#FFA46B" ${S}/><path d="M50 13L49 22L43 19" fill="#FFF3E6"/>${head("#FFA46B")}<path d="M12 39Q23 36 32 48Q41 36 52 39Q46 55 32 56Q18 55 12 39Z" fill="#FFF7EE" ${S} stroke-width="2"/>${eyes(35)}<ellipse cx="32" cy="45" rx="2.6" ry="2" fill="${K}"/>${blush}`,
+    "🐰": `<path d="M21 23C15 10 17 2 23 2C29 3 30 13 28 22" fill="#fff" ${S}/><path d="M22.5 8Q24 14 25.5 20" stroke="#FFB8C6" stroke-width="3" stroke-linecap="round"/><path d="M43 23C49 10 47 2 41 2C35 3 34 13 36 22" fill="#fff" ${S}/><path d="M41.5 8Q40 14 38.5 20" stroke="#FFB8C6" stroke-width="3" stroke-linecap="round"/>${head("#FFFFFF")}<path d="M44 20Q48 16 52 19Q49 23 44 20Z M44 20Q46 14 51 14" fill="#FF9FB2" ${S} stroke-width="1.6"/>${eyes()}<path d="M30.5 40.5Q32 42 33.5 40.5" fill="none" ${S} stroke-width="2"/>${w(42)}${blush}`,
+    "🐼": `<circle cx="15" cy="20" r="7.5" fill="${K}"/><circle cx="49" cy="20" r="7.5" fill="${K}"/>${head("#FFFFFF")}<ellipse cx="23.5" cy="37" rx="6" ry="7" transform="rotate(-18 23.5 37)" fill="${K}"/><ellipse cx="40.5" cy="37" rx="6" ry="7" transform="rotate(18 40.5 37)" fill="${K}"/><circle cx="24.5" cy="36.5" r="2.3" fill="#fff"/><circle cx="25.2" cy="35.7" r=".9" fill="${K}"/><circle cx="39.5" cy="36.5" r="2.3" fill="#fff"/><circle cx="40.2" cy="35.7" r=".9" fill="${K}"/><ellipse cx="32" cy="44" rx="2.8" ry="2" fill="${K}"/>${w(46)}<ellipse cx="15" cy="46" rx="3.6" ry="2.3" fill="#FF9FB2" opacity=".75"/><ellipse cx="49" cy="46" rx="3.6" ry="2.3" fill="#FF9FB2" opacity=".75"/>`,
+    "🐧": `<path d="M32 9C49 9 57 23 56 38C55 51 45 57 32 57C19 57 9 51 8 38C7 23 15 9 32 9Z" fill="#2E6F6A" ${S}/><path d="M32 21C43 21 49 29 48 39C47 48 40 53 32 53C24 53 17 48 16 39C15 29 21 21 32 21Z" fill="#fff" ${S} stroke-width="2"/><path d="M32 6Q35 2 38 5" fill="none" ${S} stroke-width="2"/>${eyes(35)}<path d="M28 41L32 46L36 41Q32 39 28 41Z" fill="#FFB35C" ${S} stroke-width="2"/>${blush}`,
+    "🦉": `<path d="M12 21L18 9L25 19M52 21L46 9L39 19" fill="#CFC0F6" ${S}/>${head("#CFC0F6")}<circle cx="23.5" cy="34" r="8.5" fill="#fff" ${S} stroke-width="2"/><circle cx="40.5" cy="34" r="8.5" fill="#fff" ${S} stroke-width="2"/>${eye(24.5, 34)}${eye(39.5, 34)}<path d="M29 42L32 47L35 42Q32 40.5 29 42Z" fill="#FFE98A" ${S} stroke-width="2"/><path d="M20 50Q22 48 24 50M30 52Q32 50 34 52M40 50Q42 48 44 50" fill="none" stroke="#9C87E0" stroke-width="2" stroke-linecap="round"/><ellipse cx="14" cy="42" rx="3.2" ry="2.2" fill="#FF9FB2" opacity=".75"/><ellipse cx="50" cy="42" rx="3.2" ry="2.2" fill="#FF9FB2" opacity=".75"/>`,
+    "🐶": `${head("#F7E7CF")}<path d="M14 18C5 21 4 37 10 44C15 42 18 31 19 23Z" fill="#C4915F" ${S}/><path d="M50 18C59 21 60 37 54 44C49 42 46 31 45 23Z" fill="#C4915F" ${S}/><path d="M36 26Q44 25 45 33Q43 39 37 36Z" fill="#E8C49A"/>${eyes()}<ellipse cx="32" cy="42" rx="3.2" ry="2.4" fill="${K}"/><path d="M32 44.4V46M28 46Q32 49.5 36 46" fill="none" ${S} stroke-width="2"/><path d="M30.6 47.5Q32 52 34 48.5" fill="#FF8FA6" ${S} stroke-width="1.6"/>${blush}`,
+  };
+  return Object.fromEntries(Object.entries(art).map(([k, v]) => [k, `<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="아바타">${v}</svg>`]));
+})();
+const AVA = a => AVA_SVG[a] || esc(a);
+
 let cfg, sb = null, token = null, me = null, character = null, options = null, busy = false;
 if (document.querySelector(".banner")) document.body.classList.add("has-banner");
 
 // ── 로그인과 API 호출 ─────────────────────────────────────────
+// AUTH=guest 일 때 이 브라우저의 손님 번호. 저장소를 못 쓰는 브라우저면 이번 창에서만 쓴다.
+const guestId = (() => {
+  const make = () => (crypto.randomUUID ? crypto.randomUUID() : Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2, "0")).join(""));
+  try {
+    let id = localStorage.getItem("happy-guest-id");
+    if (!id) { id = make(); localStorage.setItem("happy-guest-id", id); }
+    return id;
+  } catch { return make(); }
+})();
+
 async function api(path, opts = {}) {
   const headers = {"Content-Type": "application/json", ...(opts.headers || {})};
   if (token) headers.Authorization = `Bearer ${token}`;
+  if (cfg?.auth === "guest") headers["X-Guest-Id"] = guestId;
   const r = await fetch(path, {...opts, headers});
   if (!r.ok && !opts.raw) throw new Error(`${r.status} ${await r.text()}`);
   return opts.raw ? r : r.json();
@@ -336,6 +443,11 @@ async function logout() { await sb.auth.signOut(); location.reload(); }
 
 function renderAccount() {
   const el = $("#account");
+  if (cfg.auth === "guest") {
+    el.innerHTML = `<div class="id"><span class="dot on"></span>손님으로 사용 중</div>
+      <div class="mute" style="color:var(--ink-3);font-size:12px">이 브라우저만의 캐릭터와 대화예요. 저장소: ${cfg.storage === "memory" ? "서버 메모리 (재배포하면 사라짐)" : cfg.storage}</div>`;
+    return;
+  }
   if (cfg.auth !== "supabase") {
     el.innerHTML = `<div class="id"><span class="dot"></span>로그인 없음 (개발용 사용자)</div>
       <div class="mute" style="color:var(--ink-3);font-size:12px">저장소: ${cfg.storage === "memory" ? "서버 메모리 (재배포하면 사라짐)" : cfg.storage}</div>`;
@@ -356,11 +468,11 @@ function renderAccount() {
 // ── 캐릭터 표시 ──────────────────────────────────────────────
 function paintCharacter() {
   const c = character;
-  for (const id of ["sideAva", "topAva"]) $("#" + id).textContent = c.avatar;
+  for (const id of ["sideAva", "topAva"]) $("#" + id).innerHTML = AVA(c.avatar);
   $("#sideName").textContent = $("#topName").textContent = c.name;
   $("#sideSub").textContent = [c.age_group, c.job, c.relationship].filter(Boolean).join(" · ");
   $("#sideChips").innerHTML = [...c.traits, c.speech].map(t => `<span class="chip">${esc(t)}</span>`).join("");
-  document.querySelectorAll(".row.them .ava").forEach(a => a.textContent = c.avatar);
+  document.querySelectorAll(".row.them .ava").forEach(a => a.innerHTML = AVA(c.avatar));
 }
 
 // ── 화면 전환 ───────────────────────────────────────────────
@@ -386,7 +498,7 @@ function addRow(role, text, opts = {}) {
   const row = document.createElement("div");
   row.className = "row " + (role === "user" ? "me" : "them");
   if (role === "user") row.innerHTML = `<div class="bubble"></div>`;
-  else row.innerHTML = `<div class="ava">${character.avatar}</div><div class="bubble${opts.safety ? " safety" : ""}"></div>${opts.id ? `<button class="report" title="부적절한 답변 신고">신고</button>` : ""}`;
+  else row.innerHTML = `<div class="ava">${AVA(character.avatar)}</div><div class="bubble${opts.safety ? " safety" : ""}"></div>${opts.id ? `<button class="report" title="부적절한 답변 신고">신고</button>` : ""}`;
   row.querySelector(".bubble").textContent = text;
   if (opts.id) bindReport(row, opts.id);
   thread.appendChild(row);
@@ -507,7 +619,9 @@ $("#photoInput").onchange = async () => {
   form.append("photo", file);
   $("#input").placeholder = "사진에서 글자를 읽는 중…";
   try {
-    const r = await fetch("/api/ocr", {method: "POST", body: form, headers: token ? {Authorization: `Bearer ${token}`} : {}});
+    const headers = token ? {Authorization: `Bearer ${token}`} : {};
+    if (cfg.auth === "guest") headers["X-Guest-Id"] = guestId;
+    const r = await fetch("/api/ocr", {method: "POST", body: form, headers});
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || r.status);
     $("#input").value = `사진에서 읽은 글이야. 여기 있는 일정 중에 알려 줘야 할 게 있으면 약속으로 저장해 줘.\n${data.text}`;
@@ -580,8 +694,8 @@ function fillForm() {
       fillSegs(); previewPrompt();
     };
   });
-  $("#f-avatar").innerHTML = options.avatar.map(a => `<button type="button" class="${draft.avatar === a ? "on" : ""}">${a}</button>`).join("");
-  $("#f-avatar").onclick = e => { if (e.target.tagName === "BUTTON") { draft.avatar = e.target.textContent; fillForm2(); } };
+  $("#f-avatar").innerHTML = options.avatar.map(a => `<button type="button" data-a="${esc(a)}" class="${draft.avatar === a ? "on" : ""}">${AVA(a)}</button>`).join("");
+  $("#f-avatar").onclick = e => { const b = e.target.closest("button"); if (b) { draft.avatar = b.dataset.a; fillForm2(); } };
   document.querySelectorAll(".tags").forEach(paintTags);
   $("#f-location").innerHTML = cfg.cities.map(c => `<option>${c}</option>`).join("");
   api("/api/settings").then(s => $("#f-location").value = s.location);
@@ -593,7 +707,7 @@ function fillSegs() {
     seg.querySelectorAll("button").forEach(b => b.classList.toggle("on", multi ? draft[key].includes(b.textContent) : draft[key] === b.textContent));
   });
 }
-function fillForm2() { $("#f-avatar").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.textContent === draft.avatar)); }
+function fillForm2() { $("#f-avatar").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.a === draft.avatar)); }
 function paintTags(box) {
   const key = box.dataset.key, input = box.querySelector("input");
   box.querySelectorAll("span").forEach(s => s.remove());
