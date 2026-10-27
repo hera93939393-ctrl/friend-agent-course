@@ -22,7 +22,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
     env:
-      IMAGE: ${{ vars.AR_REPO }}/friend-agent:${{ github.sha }}
+      STAGING_SERVICE: friend-agent-staging
     steps:
       - uses: actions/checkout@v7
 
@@ -33,11 +33,26 @@ jobs:
 
       - uses: google-github-actions/setup-gcloud@v3
 
-      - name: 이미지 만들기와 올리기
+      # 1. staging 브랜치에서만 이미지를 만들고, 이미지 이름과 커밋을 다음 단계로 넘긴다
+      - name: 이미지 만들기와 올리기 (staging)
+        if: github.ref_name != 'main'
         run: |
+          IMAGE="${{ vars.AR_REPO }}/friend-agent:${{ github.sha }}"
           gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-          docker build --tag "$IMAGE" .
+          docker build --provenance=false --tag "$IMAGE" .
           docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "COMMIT=${{ github.sha }}" >> "$GITHUB_ENV"
+
+      # 2. main 브랜치에서는 이미지를 만들지 않고, staging 리비전의 다이제스트와 커밋을 찾는다
+      - name: staging 이미지 찾기 (production 승격)
+        if: github.ref_name == 'main'
+        run: |
+          REV=$(gcloud run services describe "$STAGING_SERVICE" --region us-central1 --format json | jq -r '.status.traffic | max_by(.percent) | .revisionName')
+          gcloud run revisions describe "$REV" --region us-central1 --format json > rev.json
+          echo "IMAGE=$(jq -r '.status.imageDigest' rev.json)" >> "$GITHUB_ENV"
+          echo "COMMIT=$(jq -r '.spec.containers[0].env[] | select(.name=="COMMIT_SHA") | .value' rev.json)" >> "$GITHUB_ENV"
+          echo "staging 리비전 $REV 의 이미지를 승격한다"
 
       - id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
@@ -47,7 +62,7 @@ jobs:
           project_id: ${{ vars.GCP_PROJECT_ID }}
           image: ${{ env.IMAGE }}
           env_vars: |
-            COMMIT_SHA=${{ github.sha }}
+            COMMIT_SHA=${{ env.COMMIT }}
             ENV=${{ vars.ENV }}
           flags: --service-account=${{ vars.RUNTIME_SA }}
 
@@ -55,3 +70,24 @@ jobs:
         run: |
           echo "배포된 주소 ${{ steps.deploy.outputs.url }}"
           echo "배포한 이미지 $IMAGE"
+
+      # 4. 배포가 끝나면 커밋, 리비전, 다이제스트를 실행 요약(job summary)에 표로 남긴다
+      - name: 배포 기록
+        run: |
+          REV=$(gcloud run services describe "${{ vars.SERVICE }}" --region us-central1 --format json | jq -r '.status.traffic | max_by(.percent) | "\(.revisionName) \(.percent)"')
+          REV_NAME=${REV% *}; REV_PCT=${REV#* }
+          DIGEST=$(gcloud run revisions describe "$REV_NAME" --region us-central1 --format 'value(status.imageDigest)')
+          VERSION_COMMIT=$(curl -s "${{ steps.deploy.outputs.url }}/version" | jq -r '.commit // "응답 없음"')
+          if [ "$VERSION_COMMIT" = "$COMMIT" ]; then CHECK="✅ 같음"; else CHECK="⚠️ 다름"; fi
+          {
+            echo "### 배포 기록 · ${{ vars.ENV }}"
+            echo ""
+            echo "| 항목 | 값 |"
+            echo "|---|---|"
+            echo "| 서비스 | \`${{ vars.SERVICE }}\` |"
+            echo "| 커밋 | \`$COMMIT\` |"
+            echo "| 배포한 이미지 | \`$IMAGE\` |"
+            echo "| 리비전 (트래픽) | \`$REV_NAME\` ($REV_PCT%) |"
+            echo "| 이미지 다이제스트 | \`${DIGEST##*@}\` |"
+            echo "| /version 의 commit | \`$VERSION_COMMIT\` $CHECK |"
+          } >> "$GITHUB_STEP_SUMMARY"
