@@ -39,7 +39,7 @@ jobs:
         run: |
           IMAGE="${{ vars.AR_REPO }}/friend-agent:${{ github.sha }}"
           gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
-          docker build --tag "$IMAGE" .
+          docker build --provenance=false --tag "$IMAGE" .
           docker push "$IMAGE"
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
           echo "COMMIT=${{ github.sha }}" >> "$GITHUB_ENV"
