@@ -70,3 +70,24 @@ jobs:
         run: |
           echo "배포된 주소 ${{ steps.deploy.outputs.url }}"
           echo "배포한 이미지 $IMAGE"
+
+      # 4. 배포가 끝나면 커밋, 리비전, 다이제스트를 실행 요약(job summary)에 표로 남긴다
+      - name: 배포 기록
+        run: |
+          REV=$(gcloud run services describe "${{ vars.SERVICE }}" --region us-central1 --format json | jq -r '.status.traffic | max_by(.percent) | "\(.revisionName) \(.percent)"')
+          REV_NAME=${REV% *}; REV_PCT=${REV#* }
+          DIGEST=$(gcloud run revisions describe "$REV_NAME" --region us-central1 --format 'value(status.imageDigest)')
+          VERSION_COMMIT=$(curl -s "${{ steps.deploy.outputs.url }}/version" | jq -r '.commit // "응답 없음"')
+          if [ "$VERSION_COMMIT" = "$COMMIT" ]; then CHECK="✅ 같음"; else CHECK="⚠️ 다름"; fi
+          {
+            echo "### 배포 기록 · ${{ vars.ENV }}"
+            echo ""
+            echo "| 항목 | 값 |"
+            echo "|---|---|"
+            echo "| 서비스 | \`${{ vars.SERVICE }}\` |"
+            echo "| 커밋 | \`$COMMIT\` |"
+            echo "| 배포한 이미지 | \`$IMAGE\` |"
+            echo "| 리비전 (트래픽) | \`$REV_NAME\` ($REV_PCT%) |"
+            echo "| 이미지 다이제스트 | \`${DIGEST##*@}\` |"
+            echo "| /version 의 commit | \`$VERSION_COMMIT\` $CHECK |"
+          } >> "$GITHUB_STEP_SUMMARY"
