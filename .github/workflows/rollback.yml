@@ -1,0 +1,63 @@
+# 원클릭 롤백: Actions 탭의 Run workflow 버튼으로 production 트래픽 100%를 고른 리비전으로 옮긴다.
+# 리비전 이름은 deploy 실행의 "전환 (green 100%)" 단계 로그에 남은 "롤백할 곳" 줄에서 복사한다.
+# 새 버전으로 다시 돌아갈 때도 같은 버튼에 새 리비전 이름을 넣는다.
+# 이미지를 만들지 않고 트래픽 설정만 바꾸므로 몇십 초 안에 끝난다. production 승인을 거친다.
+name: rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: "되돌아갈 리비전 이름 (예: friend-agent-00029-kxb)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      REV: ${{ inputs.revision }}
+    steps:
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # 1. 이름을 잘못 넣었거나 staging 리비전을 넣었으면 여기서 멈춘다
+      - name: 리비전 확인
+        run: |
+          OWNER=$(gcloud run revisions describe "$REV" --region us-central1 --format json | jq -r '.metadata.labels["serving.knative.dev/service"]')
+          if [ "$OWNER" != "${{ vars.SERVICE }}" ]; then
+            echo "::error::$REV 는 ${{ vars.SERVICE }} 의 리비전이 아니다 ($OWNER)"
+            exit 1
+          fi
+          echo "지금 트래픽:"
+          gcloud run services describe "${{ vars.SERVICE }}" --region us-central1 --format json | jq -r '.status.traffic[] | "  \(.revisionName) \(.percent // 0)%"'
+
+      # 2. 트래픽 100%를 그 리비전으로 옮긴다. 다음 배포의 전환 단계가 --to-latest 로 고정을 다시 푼다
+      - name: 트래픽 옮기기
+        run: gcloud run services update-traffic "${{ vars.SERVICE }}" --region us-central1 --to-revisions "$REV=100"
+
+      # 3. 서비스 주소의 /version 으로 실제로 바뀌었는지 보고 실행 요약에 남긴다
+      - name: 결과 확인
+        run: |
+          URL=$(gcloud run services describe "${{ vars.SERVICE }}" --region us-central1 --format 'value(status.url)')
+          VERSION=$(curl -s "$URL/version")
+          echo "$VERSION"
+          {
+            echo "### 롤백 · ${{ vars.ENV }}"
+            echo ""
+            echo "| 항목 | 값 |"
+            echo "|---|---|"
+            echo "| 서비스 | \`${{ vars.SERVICE }}\` |"
+            echo "| 옮긴 리비전 | \`$REV\` (100%) |"
+            echo "| /version 의 revision | \`$(echo "$VERSION" | jq -r '.revision // "응답 없음"')\` |"
+            echo "| /version 의 commit | \`$(echo "$VERSION" | jq -r '.commit // "응답 없음"')\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
