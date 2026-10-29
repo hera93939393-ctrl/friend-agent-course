@@ -79,6 +79,9 @@ def home():
 
 @app.get("/health")
 def health():
+    # 스테이지 6 시험용: Cloud Run(staging·production)에서만 일부러 실패한다. 확인 뒤 Revert 한다
+    if settings.env != "local":
+        return JSONResponse({"status": "broken"}, status_code=503)
     return {"status": "ok"}
 
 
