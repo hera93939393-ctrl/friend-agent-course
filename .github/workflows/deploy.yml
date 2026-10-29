@@ -64,12 +64,39 @@ jobs:
           env_vars: |
             COMMIT_SHA=${{ env.COMMIT }}
             ENV=${{ vars.ENV }}
-          flags: --service-account=${{ vars.RUNTIME_SA }}
+          no_traffic: true
+          tag: green
+          flags: --service-account=${{ vars.RUNTIME_SA }} --startup-probe=httpGet.path=/health,periodSeconds=5,failureThreshold=12,timeoutSeconds=2
 
       - name: 배포 결과
         run: |
           echo "배포된 주소 ${{ steps.deploy.outputs.url }}"
           echo "배포한 이미지 $IMAGE"
+
+      # 3-1. 새 리비전은 트래픽 0%라 서비스 주소로는 이전 리비전이 답한다. green 태그 URL로 새 리비전에만 묻는다
+      - name: 스모크 테스트 (green 태그 URL)
+        run: |
+          TAG_URL=$(gcloud run services describe "${{ vars.SERVICE }}" --region us-central1 --format json | jq -r '.status.traffic[] | select(.tag=="green") | .url')
+          for i in $(seq 1 12); do
+            HEALTH=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$TAG_URL/health" || true)
+            GOT=$(curl -s --max-time 5 "$TAG_URL/version" | jq -r '.commit // ""' 2>/dev/null || true)
+            echo "$i번째: $TAG_URL  /health=$HEALTH  /version commit=$GOT"
+            if [ "$HEALTH" = "200" ] && [ "$GOT" = "$COMMIT" ]; then
+              echo "스모크 테스트 통과"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::스모크 테스트 실패: 60초 동안 /health 정상과 커밋 $COMMIT 을 확인하지 못했다. 트래픽은 옮기지 않는다"
+          exit 1
+
+      # 3-2. 스모크 테스트를 통과해야 여기까지 온다. 손님을 green 으로 옮긴 뒤 고정을 풀어 둔다
+      - name: 전환 (green 100%)
+        run: |
+          PREV=$(gcloud run services describe "${{ vars.SERVICE }}" --region us-central1 --format json | jq -r '.status.traffic | max_by(.percent) | .revisionName')
+          echo "전환 전 트래픽을 받던 리비전(롤백할 곳): $PREV"
+          gcloud run services update-traffic "${{ vars.SERVICE }}" --region us-central1 --to-tags green=100
+          gcloud run services update-traffic "${{ vars.SERVICE }}" --region us-central1 --to-latest
 
       # 4. 배포가 끝나면 커밋, 리비전, 다이제스트를 실행 요약(job summary)에 표로 남긴다
       - name: 배포 기록
