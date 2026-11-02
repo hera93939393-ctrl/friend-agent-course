@@ -5,4 +5,6 @@
 import os
 
 os.environ.update({"LLM_PROVIDER": "fake", "LLM_API_KEY": "", "STORAGE": "memory", "AUTH": "none"})
+# Langfuse 키를 비워 둔다. 비우지 않으면 내 .env 의 키를 읽어 테스트 대화가 진짜 Langfuse 프로젝트로 올라간다.
+os.environ.update({"LANGFUSE_PUBLIC_KEY": "", "LANGFUSE_SECRET_KEY": ""})
 os.environ.setdefault("ENV", "test")

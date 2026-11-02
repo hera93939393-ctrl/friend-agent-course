@@ -112,11 +112,11 @@ def rule_choose(message, now, location):
 
 # ── 모델 ────────────────────────────────────────────────────────────
 
-def model_choose(message, history, now, location, llm):
+def model_choose(message, history, now, location, llm, usage=None):
     recent = "\n".join(f"{m['role']}: {m['content']}" for m in history[-4:]) or "(없음)"
     user = (f"[지금] {now.isoformat()} ({when.WEEKDAYS[now.weekday()]}요일)\n[달력]\n{when.calendar_hint(now)}\n"
             f"[사용자 지역] {location}\n[최근 대화]\n{recent}\n\n[메시지]\n{message}")
-    data = llm.complete_json(router_prompt(), user)
+    data = llm.complete_json(router_prompt(), user, usage=usage)
     tools = []
     for t in data.get("tools") or []:
         if isinstance(t, dict) and t.get("name") in TOOLS:
@@ -134,10 +134,11 @@ def model_choose(message, history, now, location, llm):
     return result
 
 
-def choose(message, history, now, location, llm):
+def choose(message, history, now, location, llm, usage=None):
+    """usage 에 dict 를 넘기면 모델을 불렀을 때 쓴 토큰 수가 채워진다(규칙이 정하면 비어 있다)."""
     if getattr(llm, "can_reason", False):
         try:
-            result = model_choose(message, history, now, location, llm)
+            result = model_choose(message, history, now, location, llm, usage)
         except Exception as error:  # 모델 응답이 형식에 맞지 않으면 규칙으로 대신한다
             log("WARNING", "모델 도구 선택 실패, 키워드 규칙으로 대신함", error=type(error).__name__)
             result = rule_choose(message, now, location)
