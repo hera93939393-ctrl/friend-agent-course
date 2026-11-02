@@ -3,6 +3,8 @@
 진짜 Langfuse로는 보내지 않는다. 단계를 받아 적기만 하는 가짜 기록기로 바꿔 끼운다.
 """
 import json
+from contextlib import contextmanager
+from datetime import datetime
 
 from fastapi.testclient import TestClient
 
@@ -15,10 +17,13 @@ client = TestClient(app)
 class Recorder:
     """Langfuse 단계 대신 이름과 값을 받아 적는다."""
 
+    current_attrs = None  # 단계를 만드는 순간 감싸고 있던 속성(propagate_attributes 대신)
+
     def __init__(self, **fields):
         self.fields = fields
         self.children = []
         self.ended = False
+        self.attrs = Recorder.current_attrs
 
     @property
     def name(self):
@@ -39,12 +44,23 @@ class Recorder:
 
 
 def record(monkeypatch):
+    """진짜 Observation 포장은 그대로 쓰고, 그 안의 Langfuse 단계와 propagate_attributes 만 바꿔 끼운다."""
     traces = []
 
-    def start_trace(name, as_type="span", **fields):
-        traces.append(Recorder(name=name, as_type=as_type, **fields))
-        return traces[-1]
+    @contextmanager
+    def propagate(attrs):
+        Recorder.current_attrs = attrs
+        try:
+            yield
+        finally:
+            Recorder.current_attrs = None
 
+    def start_trace(name, as_type="span", attrs=None, **fields):
+        with propagate(attrs):
+            traces.append(Recorder(name=name, as_type=as_type, **fields))
+        return tracing.Observation(traces[-1], attrs)
+
+    monkeypatch.setattr(tracing, "_propagate", propagate)
     monkeypatch.setattr(tracing, "start_trace", start_trace)
     return traces
 
@@ -82,3 +98,21 @@ def test_chat_turn_records_steps_with_table_names(monkeypatch):
     assert steps["reply"].fields.get("completion_start_time") is not None
     assert turn.fields["output"] == steps["reply"].fields["output"]
     assert turn.fields["metadata"]["message_id"] == events[-1]["message_id"]
+
+
+def test_attributes_follow_the_turn(monkeypatch):
+    traces = record(monkeypatch)
+    client.post("/api/chat", json={"message": "내일 서울 날씨 어때?"})
+    turn = traces[-1]
+    steps = {c.name: c for c in turn.children}
+
+    today = datetime.now(tracing.KST).strftime("%Y-%m-%d")
+    assert turn.attrs["user_id"] and "@" not in turn.attrs["user_id"]
+    assert turn.attrs["session_id"] == f"{turn.attrs['user_id']}-{today}"
+    assert turn.attrs["environment"] == "test" and turn.attrs["version"] == "local"
+    assert turn.attrs["metadata"]["commit"]
+    # 도구를 고르기 전 단계에는 도구 꼬리표가 없고, 고른 뒤 단계부터 붙는다
+    assert "tags" not in (steps["choose-tools"].attrs or {})
+    assert steps["reply"].attrs["tags"] == ["get_weather"]
+    assert steps["reply"].attrs["metadata"]["tools"] == "get_weather"
+    assert steps["reply"].attrs["metadata"]["safety"] == "false"

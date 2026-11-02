@@ -40,7 +40,7 @@ def system_prompt(character, now, location, memories, summary, tool_lines=(), cl
 
 
 def run_turn(message, uid, llm, store, show_panel):
-    turn = tracing.start_trace("chat-turn", input=message)
+    turn = tracing.start_trace("chat-turn", attrs=tracing.turn_attrs(uid), input=message)
     try:
         yield from _run_turn(message, uid, llm, store, show_panel, turn)
     finally:  # 사용자가 중간에 창을 닫아도 트레이스는 닫아서 보낸다
@@ -58,6 +58,8 @@ def _run_turn(message, uid, llm, store, show_panel, turn):
 
     # ① 위기 표현
     crisis = is_crisis(message)
+    if crisis:
+        turn = turn.with_attrs(metadata={"safety": "true"}, tags=["safety"])
     turn.start_observation(name="safety", input=message, output={"crisis": crisis}).end()
     if crisis:
         guards = ["위기 표현이 있어 캐릭터 설정과 상관없이 정해진 안전 응답을 보냈습니다."]
@@ -80,6 +82,9 @@ def _run_turn(message, uid, llm, store, show_panel, turn):
                         "action": choice.action},
                 metadata={"decided_by": choice.decided_by, "guards": choice.guards},
                 usage_details=tracing.usage_details(usage)).end()
+    tool_names = [t["name"] for t in choice.tools]
+    turn = turn.with_attrs(metadata={"tools": ",".join(tool_names) or "none", "confidence": f"{choice.confidence:.2f}",
+                                     "safety": "false"}, tags=tool_names)
     if show_panel:
         yield {"type": "turn", "tools": [{"name": t["name"], "label": TOOLS[t["name"]]["label"], "args": t["args"]}
                                          for t in choice.tools],
@@ -163,7 +168,8 @@ def greet(uid, llm, store):
     system += "\n\n[먼저 말 걸기]\n" + " ".join(guide)
     messages = [{"role": "system", "content": system}, {"role": "user", "content": "(앱을 열었다. 먼저 말을 걸어 줘)"}]
     # 모델을 부르는 때만 남긴다. 트레이스 하나가 곧 모델 호출 하나라서 맨 위 단계를 generation 으로 둔다.
-    trace = tracing.start_trace("greeting", as_type="generation", model=getattr(llm, "model", None), input=messages)
+    trace = tracing.start_trace("greeting", as_type="generation", attrs=tracing.turn_attrs(uid),
+                                model=getattr(llm, "model", None), input=messages)
     usage = {}
     try:
         text = llm.complete_text(messages, usage=usage)
