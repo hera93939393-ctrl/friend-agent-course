@@ -14,11 +14,13 @@ import json
 import os
 import time
 
+from typing import Literal
+
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app import agent, ocr, when
+from app import agent, ocr, tracing, when
 from app.auth import Auth, User
 from app.config import ROOT, load_settings
 from app.llm import make_llm
@@ -66,6 +68,11 @@ class SettingsRequest(BaseModel):
 class ReportRequest(BaseModel):
     message_id: int
     reason: str = ""
+
+
+class FeedbackRequest(BaseModel):
+    message_id: int
+    value: Literal["up", "down"]
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -185,10 +192,38 @@ async def read_photo(photo: UploadFile, user: User = Depends(current_user)):
         raise HTTPException(500, str(error)) from error
 
 
+def my_reply(user, message_id):
+    """로그인한 사용자의 답 메시지만 돌려준다. 남의 메시지이거나 사용자 메시지면 404."""
+    message = store.get_message(user.id, message_id)
+    if not message or message["role"] != "assistant":
+        raise HTTPException(404, "메시지를 찾지 못했습니다.")
+    return message
+
+
+def send_score(message, name, value, comment=None):
+    """Langfuse 점수로 보낸다. 키가 없거나 보내기에 실패해도 사용자 요청은 성공으로 끝낸다."""
+    try:
+        return tracing.score(message["meta"].get("trace_id"), name, value, comment)
+    except Exception as error:
+        log("WARNING", "Langfuse 점수 보내기 실패", name=name, error=type(error).__name__)
+        return False
+
+
+@app.post("/api/feedback")
+def feedback(req: FeedbackRequest, user: User = Depends(current_user)):
+    """답 옆의 좋아요(1), 별로예요(0)를 user-feedback 점수로 보낸다."""
+    message = my_reply(user, req.message_id)
+    sent = send_score(message, "user-feedback", 1 if req.value == "up" else 0)
+    log("INFO", "답변 반응", message_id=req.message_id, value=req.value, scored=sent)
+    return {"ok": True}
+
+
 @app.post("/api/report")
 def report(req: ReportRequest, user: User = Depends(current_user)):
-    # 지금은 로그로만 남긴다. 관측 도구를 붙이면 그 도구의 점수로 보낸다.
-    log("WARNING", "부적절한 답변 신고", message_id=req.message_id, reason_length=len(req.reason))
+    """부적절한 답 신고. 로그에는 사유의 길이만 남기고, 사유 원문은 Langfuse 점수의 comment 로만 보낸다."""
+    message = my_reply(user, req.message_id)
+    sent = send_score(message, "report", 1, req.reason[:500])
+    log("WARNING", "부적절한 답변 신고", message_id=req.message_id, reason_length=len(req.reason), scored=sent)
     return {"ok": True}
 
 

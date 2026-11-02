@@ -56,6 +56,8 @@ class _Off:
     def with_attrs(self, **kwargs):
         return self
 
+    trace_id = None
+
     def update(self, **kwargs):
         return self
 
@@ -97,6 +99,10 @@ class Observation:
         self._observation = observation
         self.attrs = attrs
 
+    @property
+    def trace_id(self):
+        return getattr(self._observation, "trace_id", None)
+
     def start_observation(self, **fields):
         with _propagate(self.attrs):
             return Observation(self._observation.start_observation(**fields), self.attrs)
@@ -137,6 +143,20 @@ def start_trace(name, as_type="span", attrs=None, **fields):
         return OFF
     with _propagate(attrs):
         return Observation(langfuse.start_observation(name=name, as_type=as_type, **fields), attrs)
+
+
+def score(trace_id, name, value, comment=None):
+    """사용자 반응을 트레이스에 BOOLEAN 점수로 붙인다(1=참, 0=거짓). 키나 트레이스 ID가 없으면 건너뛰고 False.
+
+    근거: https://langfuse.com/docs/evaluation/evaluation-methods/scores-via-sdk (create_score)
+    """
+    langfuse = client()
+    if langfuse is None or not trace_id:
+        return False
+    # 점수도 트레이스와 같은 environment 로 둔다(안 넣으면 default 로 쌓여 staging 으로 거르면 점수가 빠진다)
+    langfuse.create_score(trace_id=trace_id, name=name, value=value, data_type="BOOLEAN", comment=comment or None,
+                          environment=os.environ.get("ENV", "local").strip() or "local")
+    return True
 
 
 def usage_details(usage):

@@ -509,8 +509,21 @@ function addRow(role, text, opts = {}) {
   return {row, bubble: row.querySelector(".bubble"), under};
 }
 function bindReport(row, id) {
-  let btn = row.querySelector(".report");
+  let btn = row.querySelector(".report:not(.fb)");
   if (!btn) { btn = document.createElement("button"); btn.className = "report"; btn.textContent = "신고"; row.appendChild(btn); }
+  // 좋아요, 별로예요: Langfuse 점수(user-feedback)로 모여 '별로예요가 붙은 답부터 읽기'에 쓴다
+  if (!row.querySelector(".fb")) {
+    for (const [value, label] of [["up", "좋아요"], ["down", "별로예요"]]) {
+      const b = document.createElement("button");
+      b.className = "report fb"; b.textContent = label; b.title = `이 답이 ${label}`;
+      b.onclick = async () => {
+        await api("/api/feedback", {method: "POST", body: JSON.stringify({message_id: id, value})});
+        row.querySelectorAll(".fb").forEach(x => x.disabled = true);
+        b.textContent = label + " ✓";
+      };
+      row.insertBefore(b, btn);
+    }
+  }
   btn.onclick = async () => {
     const reason = prompt("어떤 점이 부적절했나요? (선택)") ?? null;
     if (reason === null) return;
