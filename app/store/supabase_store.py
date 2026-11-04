@@ -138,6 +138,34 @@ class SupabaseStore:
                             user_id=f"eq.{uid}", status="eq.pending", due_at=f"lte.{iso(now)}")
         return [self._reminder(r) for r in rows]
 
+    # 크레딧 원장(supabase/migrations/0002_credits.sql). delete_all 로도 지우지 않는다(돈의 기록이라서)
+    def _credit(self, row):
+        return {**row, "created_at": parse_time(row["created_at"])}
+
+    def add_credit(self, uid, delta, reason, ref):
+        """원장에 한 줄 쌓는다. ref 가 유일 키라 같은 ref 가 이미 있으면 쌓지 않고 None(데이터베이스가 막는다)."""
+        r = self.http.post("/credit_ledger", json={"user_id": uid, "delta": delta, "reason": reason, "ref": ref},
+                           params={"on_conflict": "ref"},
+                           headers={"Prefer": "return=representation,resolution=ignore-duplicates"})
+        r.raise_for_status()
+        rows = r.json()
+        return self._credit(rows[0]) if rows else None
+
+    def spend_credit(self, uid, ref, reason="chat"):
+        """잔액 확인과 -1 쌓기를 데이터베이스 함수 하나에서 한다(사용자마다 잠금). 동시 요청이 잔액을 넘지 못한다."""
+        r = self.http.post("/rpc/spend_credit", json={"p_user_id": uid, "p_ref": ref, "p_reason": reason})
+        r.raise_for_status()
+        return r.json()
+
+    def credit_balance(self, uid):
+        # 원장이 짧은 동안은 줄을 받아 더한다. 길어지면 잔액을 돌려주는 데이터베이스 함수로 바꾼다
+        return sum(row["delta"] for row in self._get("credit_ledger", user_id=f"eq.{uid}", select="delta"))
+
+    def credit_history(self, uid, limit):
+        rows = self._get("credit_ledger", user_id=f"eq.{uid}", order="id.desc", limit=limit,
+                         select="id,delta,reason,ref,created_at")
+        return [self._credit(row) for row in rows]
+
     def delete_all(self, uid):
         for table in ("messages", "summaries", "memories", "reminders", "characters", "user_settings"):
             self._delete(table, user_id=f"eq.{uid}")

@@ -21,6 +21,7 @@ class MemoryStore:
         self.lock = threading.Lock()
         self.ids = itertools.count(1)
         self.users = {}
+        self.ledger, self.credit_refs = [], set()  # 크레딧 원장. ref 는 사용자와 상관없이 하나뿐(Supabase 의 unique 와 같게)
 
     def _user(self, uid):
         return self.users.setdefault(uid, {
@@ -111,6 +112,34 @@ class MemoryStore:
                     r.update(status="delivered", delivered_at=utcnow())
                     claimed.append(dict(r))
         return claimed
+
+    # 크레딧 원장. 기록은 고치거나 지우지 않는다(delete_all 로도 지우지 않음: 돈의 기록이라서)
+    def add_credit(self, uid, delta, reason, ref):
+        """원장에 한 줄 쌓는다. 같은 ref 가 이미 있으면 쌓지 않고 None."""
+        with self.lock:
+            if ref in self.credit_refs:
+                return None
+            row = {"id": next(self.ids), "user_id": uid, "delta": delta, "reason": reason, "ref": ref, "created_at": utcnow()}
+            self.credit_refs.add(ref)
+            self.ledger.append(row)
+            return dict(row)
+
+    def spend_credit(self, uid, ref, reason="chat"):
+        """잔액이 1 이상이면 -1 을 쌓는다. 확인과 쌓기를 한 잠금 안에서 해서 동시 요청이 잔액을 넘지 못한다."""
+        with self.lock:
+            balance = sum(r["delta"] for r in self.ledger if r["user_id"] == uid)
+            if balance < 1:
+                return {"ok": False, "balance": balance}
+            self.credit_refs.add(ref)
+            self.ledger.append({"id": next(self.ids), "user_id": uid, "delta": -1, "reason": reason, "ref": ref,
+                                "created_at": utcnow()})
+            return {"ok": True, "balance": balance - 1}
+
+    def credit_balance(self, uid):
+        return sum(r["delta"] for r in self.ledger if r["user_id"] == uid)
+
+    def credit_history(self, uid, limit):
+        return [dict(r) for r in reversed([r for r in self.ledger if r["user_id"] == uid])][:limit]
 
     def delete_all(self, uid):
         self.users.pop(uid, None)

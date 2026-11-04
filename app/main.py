@@ -20,8 +20,9 @@ from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app import agent, ocr, tracing, when
+from app import agent, credits, ocr, tracing, when
 from app.auth import Auth, User
+from app.safety import is_crisis
 from app.config import ROOT, load_settings
 from app.llm import make_llm
 from app.logs import log
@@ -166,15 +167,36 @@ def chat(req: ChatRequest, user: User = Depends(current_user), model=Depends(get
     if not message:
         raise HTTPException(400, "메시지가 비어 있습니다")
 
+    # 크레딧: 답을 만들기 전에 서버에서 뺀다. 402 는 스트리밍이 시작되기 전에만 보낼 수 있다.
+    # 위기 표현은 크레딧이 0 이어도 막지 않고, 차감하지도 않는다.
+    spent_ref, balance = None, None
+    if not is_crisis(message):
+        credits.ensure_signup(store, user.id)
+        ok, balance, spent_ref = credits.spend(store, user.id)
+        if not ok:
+            log("INFO", "크레딧 부족으로 거절", balance=balance)
+            return credits.insufficient(balance)
+
     def events():
+        if balance is not None:
+            yield json.dumps({"type": "credits", "balance": balance}) + "\n"
         try:
             for event in agent.run_turn(message, user.id, model, store, settings.show_turn_panel):
                 yield json.dumps(event, ensure_ascii=False, default=str) + "\n"
         except Exception as error:
             log("ERROR", "대화 처리 실패", error=type(error).__name__)
+            if spent_ref:  # 답을 못 만들었으면 돈을 받지 않는다: 지우지 않고 +1 줄을 쌓는다
+                credits.refund(store, user.id, spent_ref)
+                yield json.dumps({"type": "credits", "balance": balance + 1}) + "\n"
             yield json.dumps({"type": "error", "message": "답을 만들지 못했어요. 잠시 뒤 다시 보내 주세요."}, ensure_ascii=False) + "\n"
 
     return StreamingResponse(events(), media_type="application/x-ndjson")
+
+
+@app.get("/api/credits")
+def get_credits(user: User = Depends(current_user)):
+    """남은 크레딧과 최근 원장 10줄. 화면은 이 값을 보여 주기만 하고, 계산은 서버가 한다."""
+    return credits.summary(store, user.id)
 
 
 @app.post("/api/greeting")
