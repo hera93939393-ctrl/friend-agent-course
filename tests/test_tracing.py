@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi.testclient import TestClient
 
 from app import tracing
-from app.main import app
+from app.main import app, store
 
 client = TestClient(app)
 
@@ -116,3 +116,30 @@ def test_attributes_follow_the_turn(monkeypatch):
     assert steps["reply"].attrs["tags"] == ["get_weather"]
     assert steps["reply"].attrs["metadata"]["tools"] == "get_weather"
     assert steps["reply"].attrs["metadata"]["safety"] == "false"
+
+
+def last_reply_id():
+    r = client.post("/api/chat", json={"message": "오늘 기분 좋아"})
+    return [json.loads(line) for line in r.text.splitlines()][-1]["message_id"]
+
+
+def test_feedback_and_report_become_scores(monkeypatch):
+    sent = []
+    monkeypatch.setattr(tracing, "score", lambda trace_id, name, value, comment=None: sent.append((name, value, comment)) or True)
+    message_id = last_reply_id()
+    assert client.post("/api/feedback", json={"message_id": message_id, "value": "up"}).json() == {"ok": True}
+    assert client.post("/api/feedback", json={"message_id": message_id, "value": "down"}).json() == {"ok": True}
+    assert client.post("/api/report", json={"message_id": message_id, "reason": "엉뚱한 답"}).json() == {"ok": True}
+    assert sent == [("user-feedback", 1, None), ("user-feedback", 0, None), ("report", 1, "엉뚱한 답")]
+
+
+def test_feedback_works_without_langfuse_keys():
+    # 키가 없으면 점수는 건너뛰고 요청은 성공한다
+    assert client.post("/api/feedback", json={"message_id": last_reply_id(), "value": "down"}).json() == {"ok": True}
+
+
+def test_cannot_score_someone_elses_message():
+    others = store.add_message("someone-else", "assistant", "남의 답", {"trace_id": "t-other"})
+    assert client.post("/api/feedback", json={"message_id": others["id"], "value": "down"}).status_code == 404
+    assert client.post("/api/report", json={"message_id": others["id"], "reason": ""}).status_code == 404
+    assert client.post("/api/feedback", json={"message_id": last_reply_id(), "value": "meh"}).status_code == 422

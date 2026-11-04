@@ -21,6 +21,8 @@ class MemoryStore:
         self.lock = threading.Lock()
         self.ids = itertools.count(1)
         self.users = {}
+        self.ledger, self.credit_refs = [], set()  # 크레딧 원장. ref 는 사용자와 상관없이 하나뿐(Supabase 의 unique 와 같게)
+        self.orders = {}                           # 결제 주문. 주문 번호 → 주문
 
     def _user(self, uid):
         return self.users.setdefault(uid, {
@@ -49,6 +51,10 @@ class MemoryStore:
 
     def recent_messages(self, uid, limit):
         return list(self._user(uid)["messages"][-limit:])
+
+    def get_message(self, uid, message_id):
+        """이 사용자의 메시지 하나. 남의 메시지 ID면 None."""
+        return next((m for m in self._user(uid)["messages"] if m["id"] == message_id), None)
 
     def messages_after(self, uid, after_id):
         return [m for m in self._user(uid)["messages"] if m["id"] > (after_id or 0)]
@@ -107,6 +113,56 @@ class MemoryStore:
                     r.update(status="delivered", delivered_at=utcnow())
                     claimed.append(dict(r))
         return claimed
+
+    # 크레딧 원장. 기록은 고치거나 지우지 않는다(delete_all 로도 지우지 않음: 돈의 기록이라서)
+    def add_credit(self, uid, delta, reason, ref):
+        """원장에 한 줄 쌓는다. 같은 ref 가 이미 있으면 쌓지 않고 None."""
+        with self.lock:
+            if ref in self.credit_refs:
+                return None
+            row = {"id": next(self.ids), "user_id": uid, "delta": delta, "reason": reason, "ref": ref, "created_at": utcnow()}
+            self.credit_refs.add(ref)
+            self.ledger.append(row)
+            return dict(row)
+
+    def spend_credit(self, uid, ref, reason="chat"):
+        """잔액이 1 이상이면 -1 을 쌓는다. 확인과 쌓기를 한 잠금 안에서 해서 동시 요청이 잔액을 넘지 못한다."""
+        with self.lock:
+            balance = sum(r["delta"] for r in self.ledger if r["user_id"] == uid)
+            if balance < 1:
+                return {"ok": False, "balance": balance}
+            self.credit_refs.add(ref)
+            self.ledger.append({"id": next(self.ids), "user_id": uid, "delta": -1, "reason": reason, "ref": ref,
+                                "created_at": utcnow()})
+            return {"ok": True, "balance": balance - 1}
+
+    def credit_balance(self, uid):
+        return sum(r["delta"] for r in self.ledger if r["user_id"] == uid)
+
+    def credit_history(self, uid, limit):
+        return [dict(r) for r in reversed([r for r in self.ledger if r["user_id"] == uid])][:limit]
+
+    # 결제 주문. 상태는 pending 일 때만 바꾼다(요청 두 개가 같은 주문을 동시에 완료하지 못하게)
+    def create_order(self, uid, order_id, product_id, amount, credits):
+        with self.lock:
+            row = {"id": next(self.ids), "order_id": order_id, "user_id": uid, "product_id": product_id,
+                   "amount": amount, "credits": credits, "status": "pending", "payment_key": None,
+                   "approved_at": None, "fail_code": None, "created_at": utcnow()}
+            self.orders[order_id] = row
+            return dict(row)
+
+    def get_order(self, uid, order_id):
+        row = self.orders.get(order_id)
+        return dict(row) if row and row["user_id"] == uid else None
+
+    def finish_order(self, uid, order_id, status, **values):
+        """pending 인 내 주문만 status 로 바꾸고 바뀐 줄을 돌려준다. 이미 바뀌었으면 None."""
+        with self.lock:
+            row = self.orders.get(order_id)
+            if not row or row["user_id"] != uid or row["status"] != "pending":
+                return None
+            row.update(status=status, **values)
+            return dict(row)
 
     def delete_all(self, uid):
         self.users.pop(uid, None)

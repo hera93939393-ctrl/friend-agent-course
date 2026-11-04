@@ -14,12 +14,15 @@ import json
 import os
 import time
 
+from typing import Literal
+
 from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app import agent, ocr, when
+from app import agent, credits, ocr, payments, tracing, when
 from app.auth import Auth, User
+from app.safety import is_crisis
 from app.config import ROOT, load_settings
 from app.llm import make_llm
 from app.logs import log
@@ -68,6 +71,11 @@ class ReportRequest(BaseModel):
     reason: str = ""
 
 
+class FeedbackRequest(BaseModel):
+    message_id: int
+    value: Literal["up", "down"]
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
     page = (ROOT / "static" / "index.html").read_text(encoding="utf-8")
@@ -97,6 +105,7 @@ def config():
             "supabase_publishable_key": settings.supabase_publishable_key if settings.auth == "supabase" else "",
             "google_login": settings.google_login, "show_turn_panel": settings.show_turn_panel,
             "ocr_enabled": settings.ocr_enabled,
+            "toss_client_key": settings.toss_client_key,  # 클라이언트 키만. 시크릿 키는 여기에 넣지 않는다
             "options": OPTIONS, "cities": list(CITIES)}
 
 
@@ -159,15 +168,86 @@ def chat(req: ChatRequest, user: User = Depends(current_user), model=Depends(get
     if not message:
         raise HTTPException(400, "메시지가 비어 있습니다")
 
+    # 크레딧: 답을 만들기 전에 서버에서 뺀다. 402 는 스트리밍이 시작되기 전에만 보낼 수 있다.
+    # 위기 표현은 크레딧이 0 이어도 막지 않고, 차감하지도 않는다.
+    spent_ref, balance = None, None
+    if not is_crisis(message):
+        credits.ensure_signup(store, user)
+        ok, balance, spent_ref = credits.spend(store, user.id)
+        if not ok:
+            log("INFO", "크레딧 부족으로 거절", balance=balance)
+            return credits.insufficient(balance)
+
     def events():
+        if balance is not None:
+            yield json.dumps({"type": "credits", "balance": balance}) + "\n"
         try:
             for event in agent.run_turn(message, user.id, model, store, settings.show_turn_panel):
                 yield json.dumps(event, ensure_ascii=False, default=str) + "\n"
         except Exception as error:
             log("ERROR", "대화 처리 실패", error=type(error).__name__)
+            if spent_ref:  # 답을 못 만들었으면 돈을 받지 않는다: 지우지 않고 +1 줄을 쌓는다
+                credits.refund(store, user.id, spent_ref)
+                yield json.dumps({"type": "credits", "balance": balance + 1}) + "\n"
             yield json.dumps({"type": "error", "message": "답을 만들지 못했어요. 잠시 뒤 다시 보내 주세요."}, ensure_ascii=False) + "\n"
 
     return StreamingResponse(events(), media_type="application/x-ndjson")
+
+
+@app.get("/api/credits")
+def get_credits(user: User = Depends(current_user)):
+    """남은 크레딧과 최근 원장 10줄. 화면은 이 값을 보여 주기만 하고, 계산은 서버가 한다."""
+    return credits.summary(store, user)
+
+
+# ── 크레딧 결제(app/payments.py) ───────────────────────────────────
+
+class OrderRequest(BaseModel):
+    product_id: str  # 화면은 상품 ID 만 보낸다. 금액은 서버 상품표에서 찾는다
+
+
+class ConfirmRequest(BaseModel):
+    paymentKey: str
+    orderId: str
+    amount: int | str  # 비교만 하고, 승인에는 주문에 저장한 금액을 쓴다
+
+
+class FailRequest(BaseModel):
+    code: str = ""
+
+
+def payments_on():
+    if not (settings.toss_client_key and settings.toss_secret_key):
+        raise HTTPException(503, {"error": "payments_off", "message": "지금은 결제를 받을 수 없어요."})
+
+
+@app.get("/api/products")
+def products():
+    return {"products": credits.product_list(), "enabled": bool(settings.toss_client_key and settings.toss_secret_key)}
+
+
+@app.post("/api/orders")
+def create_order(req: OrderRequest, user: User = Depends(current_user)):
+    payments_on()
+    return payments.create(store, user.id, req.product_id)
+
+
+@app.post("/api/payments/confirm")
+def confirm_payment(req: ConfirmRequest, user: User = Depends(current_user)):
+    payments_on()
+    return payments.confirm(store, settings.toss_secret_key, user.id, req.paymentKey, req.orderId, req.amount)
+
+
+@app.post("/api/orders/{order_id}/fail")
+def fail_order(order_id: str, req: FailRequest, user: User = Depends(current_user)):
+    return payments.mark_failed(store, user.id, order_id, req.code)
+
+
+@app.get("/pay/success", response_class=HTMLResponse)
+@app.get("/pay/fail", response_class=HTMLResponse)
+def pay_return():
+    """결제 뒤 돌아오는 주소. 로그인을 다시 쓰려고 같은 화면을 보여 주고, 화면이 주소를 보고 승인·실패를 처리한다."""
+    return home()
 
 
 @app.post("/api/greeting")
@@ -185,10 +265,38 @@ async def read_photo(photo: UploadFile, user: User = Depends(current_user)):
         raise HTTPException(500, str(error)) from error
 
 
+def my_reply(user, message_id):
+    """로그인한 사용자의 답 메시지만 돌려준다. 남의 메시지이거나 사용자 메시지면 404."""
+    message = store.get_message(user.id, message_id)
+    if not message or message["role"] != "assistant":
+        raise HTTPException(404, "메시지를 찾지 못했습니다.")
+    return message
+
+
+def send_score(message, name, value, comment=None):
+    """Langfuse 점수로 보낸다. 키가 없거나 보내기에 실패해도 사용자 요청은 성공으로 끝낸다."""
+    try:
+        return tracing.score(message["meta"].get("trace_id"), name, value, comment)
+    except Exception as error:
+        log("WARNING", "Langfuse 점수 보내기 실패", name=name, error=type(error).__name__)
+        return False
+
+
+@app.post("/api/feedback")
+def feedback(req: FeedbackRequest, user: User = Depends(current_user)):
+    """답 옆의 좋아요(1), 별로예요(0)를 user-feedback 점수로 보낸다."""
+    message = my_reply(user, req.message_id)
+    sent = send_score(message, "user-feedback", 1 if req.value == "up" else 0)
+    log("INFO", "답변 반응", message_id=req.message_id, value=req.value, scored=sent)
+    return {"ok": True}
+
+
 @app.post("/api/report")
 def report(req: ReportRequest, user: User = Depends(current_user)):
-    # 지금은 로그로만 남긴다. 관측 도구를 붙이면 그 도구의 점수로 보낸다.
-    log("WARNING", "부적절한 답변 신고", message_id=req.message_id, reason_length=len(req.reason))
+    """부적절한 답 신고. 로그에는 사유의 길이만 남기고, 사유 원문은 Langfuse 점수의 comment 로만 보낸다."""
+    message = my_reply(user, req.message_id)
+    sent = send_score(message, "report", 1, req.reason[:500])
+    log("WARNING", "부적절한 답변 신고", message_id=req.message_id, reason_length=len(req.reason), scored=sent)
     return {"ok": True}
 
 

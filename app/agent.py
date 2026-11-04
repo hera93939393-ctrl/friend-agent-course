@@ -67,7 +67,8 @@ def _run_turn(message, uid, llm, store, show_panel, turn):
             yield {"type": "turn", "tools": [], "confidence": None, "reason": "", "decided_by": "rule",
                    "action": "safety", "guards": guards}
         yield {"type": "delta", "text": CRISIS_REPLY}
-        saved = store.add_message(uid, "assistant", CRISIS_REPLY, {"action": "safety", "guards": guards})
+        saved = store.add_message(uid, "assistant", CRISIS_REPLY, {"action": "safety", "guards": guards,
+                                                                    "trace_id": turn.trace_id})
         log("WARNING", "위기 표현 안전 응답")
         turn.update(output=CRISIS_REPLY, metadata={"message_id": saved["id"], "action": "safety"})
         yield {"type": "done", "message_id": saved["id"]}
@@ -125,8 +126,9 @@ def _run_turn(message, uid, llm, store, show_panel, turn):
             yield {"type": "delta", "text": chunk}
     finally:
         step.update(output=reply, usage_details=tracing.usage_details(usage)).end()
+    # trace_id: 화면의 좋아요, 별로예요, 신고를 이 턴의 Langfuse 트레이스에 점수로 붙일 때 쓴다(main.py /api/feedback)
     meta = {"tools": [t["name"] for t in choice.tools], "confidence": choice.confidence,
-            "action": choice.action, "guards": choice.guards}
+            "action": choice.action, "guards": choice.guards, "trace_id": turn.trace_id}
     saved = store.add_message(uid, "assistant", reply, meta)
     turn.update(output=reply, metadata={"message_id": saved["id"], "action": choice.action})
 
@@ -177,6 +179,7 @@ def greet(uid, llm, store):
                      metadata={"reminders": len(due), "first_meeting": not last})
     finally:
         trace.end()
-    saved = store.add_message(uid, "assistant", text, {"action": "greeting", "reminders": [r["id"] for r in due]})
+    saved = store.add_message(uid, "assistant", text, {"action": "greeting", "reminders": [r["id"] for r in due],
+                                                       "trace_id": trace.trace_id})
     log("INFO", "먼저 말 걸기", reminders=len(due))
     return {"id": saved["id"], "text": text, "reminders": [r["text"] for r in due]}

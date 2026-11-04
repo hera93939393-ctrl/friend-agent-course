@@ -81,6 +81,29 @@ body.has-banner .app{height:calc(100dvh - 32px)}
 .note.rem{background:var(--info-soft);color:var(--info)}
 .note.mem{background:var(--ok-soft);color:var(--ok)}
 .note.busy{color:var(--ink-3)}
+.credits{font-size:13px;padding:6px 10px;margin:8px 0;border-radius:10px;background:var(--ok-soft);color:var(--ok)}
+.credits.empty{background:var(--warn-soft);color:var(--warn)}
+.credits .buy{float:right;border:0;background:none;color:inherit;font-size:12.5px;font-weight:700;text-decoration:underline;padding:0}
+/* 크레딧 충전 팝업. 결제 금액은 화면이 정하지 않는다: 상품 ID 만 서버로 보내고 서버가 만든 주문의 금액을 쓴다 */
+.lowbar{max-width:720px;margin:0 auto 8px;font-size:13px;padding:6px 12px;border-radius:10px;background:var(--warn-soft);color:var(--warn);display:flex;justify-content:space-between;align-items:center}
+.lowbar button{border:0;background:none;color:inherit;font-weight:700;text-decoration:underline;padding:0}
+.pay-scrim{position:fixed;inset:0;z-index:50;background:rgba(30,25,20,.45);display:flex;align-items:center;justify-content:center;padding:16px}
+.pay{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow);width:100%;max-width:480px;max-height:calc(100dvh - 32px);overflow-y:auto;padding:20px}
+.pay-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.pay-head h3{margin:0;font-size:17px}
+.pay-msg{margin:0 0 12px;padding:8px 12px;border-radius:10px;background:var(--warn-soft);color:var(--warn);font-size:13.5px}
+.pay-products{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.pay-products button{border:1px solid var(--line-2);background:#fff;border-radius:12px;padding:12px;text-align:left;display:flex;flex-direction:column;gap:2px}
+.pay-products button.on{border:2px solid var(--accent);background:var(--accent-soft)}
+.pay-products b{font-size:15px}
+.pay-products span{font-size:12.5px;color:var(--ink-3)}
+.pay-rules{margin:0 0 12px;padding-left:18px;font-size:12.5px;color:var(--ink-2)}
+.pay-guest{margin:0 0 12px;font-size:12.5px;color:var(--warn)}
+.pay .btn.primary{width:100%;padding:12px}
+.pay .btn.primary:disabled{background:var(--line-2);border-color:var(--line-2)}
+.pay-err{font-size:13px;color:#c23a3e;margin:8px 0 0}
+.paynote{align-self:center;font-size:13px;padding:6px 12px;border-radius:999px;background:var(--ok-soft);color:var(--ok)}
+.paynote.bad{background:var(--warn-soft);color:var(--warn)}
 .report{font-size:12px;color:var(--ink-3);background:none;border:0;padding:2px 4px;opacity:0;transition:opacity .15s}
 .row.them:hover .report{opacity:1}
 .day{align-self:center;font-size:12px;color:var(--ink-3);background:var(--surface-2);border:1px solid var(--line);padding:2px 10px;border-radius:999px}
@@ -284,6 +307,7 @@ body{font-family:"HappyEmoji","Dongle","Pretendard Variable",sans-serif;font-siz
       <button data-view="setup">🎨 캐릭터 설정</button>
       <button data-view="memory">🧠 기억과 약속 <span class="count" id="memCount"></span></button>
     </nav>
+    <div class="credits" id="credits" title="메시지 하나에 크레딧 1개가 빠져요">🪙 크레딧 <b id="creditCount">…</b><button class="buy" id="buyBtn">사기</button></div>
     <div class="account" id="account"></div>
   </aside>
   <div class="scrim" id="scrim"></div>
@@ -300,6 +324,7 @@ body{font-family:"HappyEmoji","Dongle","Pretendard Variable",sans-serif;font-siz
     <section id="view-chat" class="main" style="flex:1;min-height:0">
       <div class="chat" id="chat"><div class="thread" id="thread"></div></div>
       <div class="composer"><div class="composer-in">
+        <div class="lowbar" id="lowBar" hidden><span>크레딧이 얼마 남지 않았어요</span><button type="button" id="lowBuy">사기</button></div>
         <div class="suggest" id="suggest"></div>
         <form class="box" id="form">
           <button type="button" class="photo" id="photoBtn" title="사진에서 글자 읽기" hidden>📷</button>
@@ -365,8 +390,25 @@ body{font-family:"HappyEmoji","Dongle","Pretendard Variable",sans-serif;font-siz
   </aside>
 </div>
 
+<div class="pay-scrim" id="payScrim" hidden>
+  <div class="pay" role="dialog" aria-modal="true" aria-labelledby="payTitle">
+    <div class="pay-head"><h3 id="payTitle">🪙 크레딧 충전</h3><button class="btn ghost" id="payClose">닫기</button></div>
+    <p class="pay-msg" id="payMsg" hidden></p>
+    <div class="pay-products" id="payProducts"></div>
+    <ul class="pay-rules">
+      <li>메시지 1개에 크레딧 1개가 빠져요. 위기 상담이 필요한 메시지는 빠지지 않아요.</li>
+      <li>[환불 기준은 정식 판매 전에 정해 안내합니다]</li>
+    </ul>
+    <p class="pay-guest" id="payGuest" hidden>게스트로 쓰는 중이에요. 브라우저 데이터를 지우거나 다른 기기에서 열면 산 크레딧을 다시 쓸 수 없어요.</p>
+    <div id="payment-method"></div>
+    <div id="agreement"></div>
+    <button class="btn primary" id="payBtn" disabled>결제하기</button>
+    <p class="pay-err" id="payErr" hidden></p>
+  </div>
+</div>
+
 <script type="module">
-const $ = (s, el = document) => el.querySelector(s);
+const $ =(s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
 const SUGGEST = ["내일 날씨 어때?", "오늘 미세먼지 어때?", "다음 공휴일 언제야?", "내일 아침 8시에 물 마시라고 알려 줘", "내 약속 뭐 있어?", "내 이름은 지수야. 고양이를 좋아해"];
 const THRESHOLD = 0.6;
@@ -455,7 +497,7 @@ function renderAccount() {
   }
   if (me.anonymous) {
     el.innerHTML = `<div class="id"><span class="dot"></span>게스트로 사용 중</div>
-      ${cfg.google_login ? `<button class="btn google" id="gLink">🔗 구글 계정에 연결</button><button class="btn ghost" id="gLogin">이미 연결한 계정으로 로그인</button>` :
+      ${cfg.google_login ? `<div style="font-size:12px;color:var(--ink-3)">게스트는 체험 크레딧 3개예요. 구글 계정에 연결하면 27개를 더 받아요.</div><button class="btn google" id="gLink">🔗 구글 계정에 연결</button><button class="btn ghost" id="gLogin">이미 연결한 계정으로 로그인</button>` :
         `<div style="font-size:12px;color:var(--ink-3)">이 브라우저에만 저장됩니다.</div>`}`;
     $("#gLink")?.addEventListener("click", linkGoogle);
     $("#gLogin")?.addEventListener("click", loginGoogle);
@@ -509,8 +551,21 @@ function addRow(role, text, opts = {}) {
   return {row, bubble: row.querySelector(".bubble"), under};
 }
 function bindReport(row, id) {
-  let btn = row.querySelector(".report");
+  let btn = row.querySelector(".report:not(.fb)");
   if (!btn) { btn = document.createElement("button"); btn.className = "report"; btn.textContent = "신고"; row.appendChild(btn); }
+  // 좋아요, 별로예요: Langfuse 점수(user-feedback)로 모여 '별로예요가 붙은 답부터 읽기'에 쓴다
+  if (!row.querySelector(".fb")) {
+    for (const [value, label] of [["up", "좋아요"], ["down", "별로예요"]]) {
+      const b = document.createElement("button");
+      b.className = "report fb"; b.textContent = label; b.title = `이 답이 ${label}`;
+      b.onclick = async () => {
+        await api("/api/feedback", {method: "POST", body: JSON.stringify({message_id: id, value})});
+        row.querySelectorAll(".fb").forEach(x => x.disabled = true);
+        b.textContent = label + " ✓";
+      };
+      row.insertBefore(b, btn);
+    }
+  }
   btn.onclick = async () => {
     const reason = prompt("어떤 점이 부적절했나요? (선택)") ?? null;
     if (reason === null) return;
@@ -553,6 +608,14 @@ async function send(text) {
   let reply = "", busyNote = null, finished = false;
   try {
     const r = await api("/api/chat", {method: "POST", body: JSON.stringify({message: text}), raw: true});
+    if (r.status === 402) {  // 크레딧 부족: 서버가 거절했다(화면은 차감을 계산하지 않고 받은 값을 보여 주기만 한다)
+      const body = await r.json();
+      bubble.textContent = body.message; bubble.classList.add("safety");
+      showCredits(body.balance); finished = true;
+      $("#input").value = text; autosize();  // 보내려던 메시지는 지우지 않고 입력창에 되돌려 둔다
+      openPay(body.message);
+      return;
+    }
     if (!r.ok) throw new Error(await r.text());
     const reader = r.body.getReader(), dec = new TextDecoder();
     let buf = "";
@@ -565,7 +628,8 @@ async function send(text) {
         const line = buf.slice(0, i); buf = buf.slice(i + 1);
         if (!line.trim()) continue;
         const e = JSON.parse(line);
-        if (e.type === "turn") { tTurn = performance.now(); panel?.turn(e); if (e.action === "safety") bubble.classList.add("safety"); }
+        if (e.type === "credits") showCredits(e.balance);
+        else if (e.type === "turn") { tTurn = performance.now(); panel?.turn(e); if (e.action === "safety") bubble.classList.add("safety"); }
         else if (e.type === "tool") panel?.tool(e);
         else if (e.type === "context") panel?.context(e);
         else if (e.type === "reminder") note(under, "rem", (e.action === "create_reminder" ? "⏰ " : "🗑 ") + e.summary);
@@ -765,6 +829,113 @@ async function loadMemory() {
   $("#memCount").textContent = mems.length || "";
 }
 async function refreshCount() { const m = await api("/api/memories"); $("#memCount").textContent = m.length || ""; }
+function showCredits(n) {
+  $("#creditCount").textContent = n; $("#credits").classList.toggle("empty", n <= 0);
+  $("#lowBar").hidden = n > 10;
+}
+async function refreshCredits() { try { showCredits((await api("/api/credits")).balance); } catch (err) { console.error(err); } }
+
+// ── 크레딧 결제(토스페이먼츠 결제위젯 v2) ─────────────────────
+// 화면은 상품 ID 만 서버로 보낸다. 금액은 서버가 만든 주문의 값을 위젯에 넣고, 크레딧은 서버 승인 뒤에만 늘어난다.
+let products = null, payEnabled = false, picked = null, widgets = null, widgetReady = false;
+const won = n => n.toLocaleString("ko-KR") + "원";
+const DRAFT_KEY = "happy-pay-draft";
+function saveDraft() { try { sessionStorage.setItem(DRAFT_KEY, $("#input").value); } catch {} }
+function restoreDraft() {
+  try { const v = sessionStorage.getItem(DRAFT_KEY); sessionStorage.removeItem(DRAFT_KEY); if (v) { $("#input").value = v; autosize(); } } catch {}
+}
+function payError(text) { $("#payErr").textContent = text; $("#payErr").hidden = !text; }
+function loadTossScript() {
+  if (window.TossPayments) return Promise.resolve();
+  return new Promise((ok, no) => {
+    const s = document.createElement("script");
+    s.src = "https://js.tosspayments.com/v2/standard"; s.onload = ok; s.onerror = () => no(new Error("결제창을 불러오지 못했어요."));
+    document.head.appendChild(s);
+  });
+}
+async function pickProduct(id) {
+  picked = products.find(p => p.id === id);
+  $("#payProducts").querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.id === id));
+  if (!payEnabled) return;
+  $("#payBtn").disabled = true; payError("");
+  try {
+    if (!widgets) {
+      await loadTossScript();
+      widgets = window.TossPayments(cfg.toss_client_key).widgets({customerKey: me.id});
+    }
+    await widgets.setAmount({currency: "KRW", value: picked.amount});  // 보여 주기용. 실제 승인 금액은 서버가 주문에서 꺼낸다
+    if (!widgetReady) {
+      await Promise.all([
+        widgets.renderPaymentMethods({selector: "#payment-method", variantKey: "DEFAULT"}),
+        widgets.renderAgreement({selector: "#agreement", variantKey: "AGREEMENT"}),
+      ]);
+      widgetReady = true;
+    }
+    $("#payBtn").disabled = false;
+    $("#payBtn").textContent = `${won(picked.amount)} 결제하기`;
+  } catch (err) { console.error(err); payError(err.message || "결제창을 불러오지 못했어요."); }
+}
+async function openPay(message) {
+  $("#payMsg").textContent = message || ""; $("#payMsg").hidden = !message;
+  $("#payGuest").hidden = !me?.anonymous;
+  payError(""); $("#payScrim").hidden = false;
+  if (!products) {
+    const data = await api("/api/products");
+    products = data.products; payEnabled = data.enabled && !!cfg.toss_client_key;
+    $("#payProducts").innerHTML = products.map(p =>
+      `<button type="button" data-id="${esc(p.id)}"><b>🪙 ${p.credits}개</b><span>${won(p.amount)} · 1개 ${p.per_credit}원</span></button>`).join("");
+    $("#payProducts").onclick = e => { const b = e.target.closest("button"); if (b) pickProduct(b.dataset.id); };
+  }
+  if (!payEnabled) { payError("지금은 결제를 받을 수 없어요."); return; }
+  if (!picked) pickProduct(products[0].id);
+}
+function closePay() { $("#payScrim").hidden = true; }
+async function startPayment() {
+  if (!picked || !widgetReady) return;
+  $("#payBtn").disabled = true; payError("");
+  let order;
+  try {
+    order = await api("/api/orders", {method: "POST", body: JSON.stringify({product_id: picked.id})});
+    await widgets.setAmount({currency: "KRW", value: order.amount});
+    saveDraft();  // 결제창으로 이동했다 돌아와도 쓰던 메시지를 되살린다
+    await widgets.requestPayment({
+      orderId: order.order_id, orderName: order.order_name,
+      successUrl: location.origin + "/pay/success", failUrl: location.origin + "/pay/fail",
+    });
+  } catch (err) {  // 결제창을 닫았거나 약관에 동의하지 않은 경우 등. 돌아오지 않았으므로 여기서 실패로 적는다
+    console.error(err);
+    if (order) api(`/api/orders/${encodeURIComponent(order.order_id)}/fail`, {method: "POST", body: JSON.stringify({code: err.code || "CLIENT_ERROR"})}).catch(() => {});
+    payError(err.code === "USER_CANCEL" ? "결제를 취소했어요." : (err.message || "결제를 시작하지 못했어요."));
+    $("#payBtn").disabled = false;
+  }
+}
+async function handlePayReturn() {
+  // 결제창에서 돌아온 주소(/pay/success, /pay/fail)를 처리한다. 주소를 먼저 / 로 바꿔 새로고침해도 다시 보내지 않게 한다
+  const path = location.pathname, q = new URLSearchParams(location.search);
+  if (path !== "/pay/success" && path !== "/pay/fail") return null;
+  history.replaceState(null, "", "/");
+  if (path === "/pay/fail") {
+    const orderId = q.get("orderId");
+    if (orderId) await api(`/api/orders/${encodeURIComponent(orderId)}/fail`, {method: "POST", body: JSON.stringify({code: q.get("code") || ""})}).catch(() => {});
+    return {bad: true, text: `결제가 완료되지 않았어요. ${q.get("message") || ""} (${q.get("code") || "오류"})`};
+  }
+  const r = await api("/api/payments/confirm", {method: "POST", raw: true,
+    body: JSON.stringify({paymentKey: q.get("paymentKey"), orderId: q.get("orderId"), amount: q.get("amount")})});
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) return {bad: true, text: body.detail?.message || "결제를 확인하지 못했어요."};
+  return {bad: false, text: `🪙 크레딧 ${body.credits}개를 충전했어요. 남은 크레딧 ${body.balance}개`};
+}
+function payNote(result) {
+  if (!result) return;
+  const el = document.createElement("div");
+  el.className = "paynote" + (result.bad ? " bad" : ""); el.textContent = result.text;
+  $("#thread").appendChild(el);
+}
+$("#buyBtn").onclick = () => openPay();
+$("#lowBuy").onclick = () => openPay();
+$("#payClose").onclick = closePay;
+$("#payScrim").onclick = e => { if (e.target.id === "payScrim") closePay(); };
+$("#payBtn").onclick = startPayment;
 $("#clearMem").onclick = async () => { if (confirm("기억을 모두 지울까요?")) { await api("/api/memories", {method: "DELETE"}); loadMemory(); } };
 $("#deleteAll").onclick = async () => {
   if (!confirm("캐릭터, 대화, 기억, 약속을 모두 지웁니다. 되돌릴 수 없습니다. 계속할까요?")) return;
@@ -780,11 +951,12 @@ $("#deleteAll").onclick = async () => {
   try { await initAuth(); } catch (err) { console.error(err); alert("로그인을 시작하지 못했습니다. 잠시 뒤 새로고침해 주세요."); return; }
   me = await api("/api/me");
   renderAccount();
+  const payResult = await handlePayReturn().catch(err => { console.error(err); return {bad: true, text: "결제를 확인하지 못했어요."}; });
   character = (await api("/api/character")).character;
-  paintCharacter(); refreshCount();
+  paintCharacter(); refreshCount(); refreshCredits();
   if (!me.has_character) { $("#setupTitle").textContent = "캐릭터 만들기"; show("setup"); return; }
   await loadHistory();
-  await greet();
+  if (payResult) { payNote(payResult); restoreDraft(); } else await greet();
   $("#input").focus();
 })();
 </script>

@@ -78,6 +78,11 @@ class SupabaseStore:
         rows = self._get("messages", user_id=f"eq.{uid}", order="id.desc", limit=limit)
         return [self._message(r) for r in reversed(rows)]
 
+    def get_message(self, uid, message_id):
+        """이 사용자의 메시지 하나. 남의 메시지 ID면 None(user_id 조건을 늘 붙인다)."""
+        rows = self._get("messages", user_id=f"eq.{uid}", id=f"eq.{int(message_id)}", limit=1)
+        return self._message(rows[0]) if rows else None
+
     def messages_after(self, uid, after_id):
         rows = self._get("messages", user_id=f"eq.{uid}", id=f"gt.{after_id or 0}", order="id.asc")
         return [self._message(r) for r in rows]
@@ -132,6 +137,54 @@ class SupabaseStore:
         rows = self._update("reminders", {"status": "delivered", "delivered_at": iso(datetime.now(timezone.utc))},
                             user_id=f"eq.{uid}", status="eq.pending", due_at=f"lte.{iso(now)}")
         return [self._reminder(r) for r in rows]
+
+    # 크레딧 원장(supabase/migrations/0002_credits.sql). delete_all 로도 지우지 않는다(돈의 기록이라서)
+    def _credit(self, row):
+        return {**row, "created_at": parse_time(row["created_at"])}
+
+    def add_credit(self, uid, delta, reason, ref):
+        """원장에 한 줄 쌓는다. ref 가 유일 키라 같은 ref 가 이미 있으면 쌓지 않고 None(데이터베이스가 막는다)."""
+        r = self.http.post("/credit_ledger", json={"user_id": uid, "delta": delta, "reason": reason, "ref": ref},
+                           params={"on_conflict": "ref"},
+                           headers={"Prefer": "return=representation,resolution=ignore-duplicates"})
+        r.raise_for_status()
+        rows = r.json()
+        return self._credit(rows[0]) if rows else None
+
+    def spend_credit(self, uid, ref, reason="chat"):
+        """잔액 확인과 -1 쌓기를 데이터베이스 함수 하나에서 한다(사용자마다 잠금). 동시 요청이 잔액을 넘지 못한다."""
+        r = self.http.post("/rpc/spend_credit", json={"p_user_id": uid, "p_ref": ref, "p_reason": reason})
+        r.raise_for_status()
+        return r.json()
+
+    def credit_balance(self, uid):
+        # 원장이 짧은 동안은 줄을 받아 더한다. 길어지면 잔액을 돌려주는 데이터베이스 함수로 바꾼다
+        return sum(row["delta"] for row in self._get("credit_ledger", user_id=f"eq.{uid}", select="delta"))
+
+    def credit_history(self, uid, limit):
+        rows = self._get("credit_ledger", user_id=f"eq.{uid}", order="id.desc", limit=limit,
+                         select="id,delta,reason,ref,created_at")
+        return [self._credit(row) for row in rows]
+
+    # 결제 주문(supabase/migrations/0003_orders.sql)
+    def _order(self, row):
+        return {**row, "created_at": parse_time(row["created_at"]), "approved_at": parse_time(row.get("approved_at"))}
+
+    def create_order(self, uid, order_id, product_id, amount, credits):
+        return self._order(self._insert("orders", {"order_id": order_id, "user_id": uid, "product_id": product_id,
+                                                   "amount": amount, "credits": credits}))
+
+    def get_order(self, uid, order_id):
+        rows = self._get("orders", user_id=f"eq.{uid}", order_id=f"eq.{order_id}", limit=1)
+        return self._order(rows[0]) if rows else None
+
+    def finish_order(self, uid, order_id, status, **values):
+        """status 가 pending 인 내 주문만 바꾸는 조건부 업데이트. 요청 두 개가 동시에 와도 한쪽만 그 줄을 돌려받는다."""
+        if values.get("approved_at"):
+            values["approved_at"] = iso(values["approved_at"])
+        rows = self._update("orders", {"status": status, **values},
+                            user_id=f"eq.{uid}", order_id=f"eq.{order_id}", status="eq.pending")
+        return self._order(rows[0]) if rows else None
 
     def delete_all(self, uid):
         for table in ("messages", "summaries", "memories", "reminders", "characters", "user_settings"):
