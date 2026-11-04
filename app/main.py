@@ -172,7 +172,7 @@ def chat(req: ChatRequest, user: User = Depends(current_user), model=Depends(get
     # 위기 표현은 크레딧이 0 이어도 막지 않고, 차감하지도 않는다.
     spent_ref, balance = None, None
     if not is_crisis(message):
-        credits.ensure_signup(store, user.id)
+        credits.ensure_signup(store, user)
         ok, balance, spent_ref = credits.spend(store, user.id)
         if not ok:
             log("INFO", "크레딧 부족으로 거절", balance=balance)
@@ -197,7 +197,7 @@ def chat(req: ChatRequest, user: User = Depends(current_user), model=Depends(get
 @app.get("/api/credits")
 def get_credits(user: User = Depends(current_user)):
     """남은 크레딧과 최근 원장 10줄. 화면은 이 값을 보여 주기만 하고, 계산은 서버가 한다."""
-    return credits.summary(store, user.id)
+    return credits.summary(store, user)
 
 
 # ── 크레딧 결제(app/payments.py) ───────────────────────────────────

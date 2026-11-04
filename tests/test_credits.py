@@ -1,10 +1,12 @@
 """크레딧 원장: 메시지 하나에 1개, 0 이면 402, 실패하면 되돌리고, 위기 표현은 0 이어도 답한다."""
 import json
+import threading
 import uuid
 
 from fastapi.testclient import TestClient
 
 from app import agent, credits
+from app.auth import User
 from app.main import app, store
 
 client = TestClient(app)
@@ -72,10 +74,50 @@ def test_failed_reply_gets_refund_line(monkeypatch):
 
 
 def test_signup_credits_are_given_only_once():
-    uid = f"new-{uuid.uuid4()}"
-    credits.ensure_signup(store, uid)
-    credits.ensure_signup(store, uid)  # 같은 ref(signup:사용자ID)라 두 번째는 쌓이지 않는다
-    assert store.credit_balance(uid) == credits.signup_credits() == 30
+    account = User(f"new-{uuid.uuid4()}", anonymous=False)
+    credits.ensure_signup(store, account)
+    credits.ensure_signup(store, account)  # 같은 ref(signup:·account:사용자ID)라 두 번째는 쌓이지 않는다
+    assert store.credit_balance(account.id) == credits.signup_credits() == 30
+
+
+def test_new_guests_get_only_trial_credits():
+    """공격 시험: 게스트를 새로 만들 때마다 30개를 받던 구멍. 게스트는 체험 3개만 받는다."""
+    guests = [User(f"guest-{uuid.uuid4()}", anonymous=True) for _ in range(5)]
+    for g in guests:
+        credits.ensure_signup(store, g)
+    assert sum(store.credit_balance(g.id) for g in guests) == 5 * credits.guest_credits() == 15
+
+
+def test_guest_gets_the_rest_after_linking_account():
+    """게스트가 구글 계정에 연결하면 같은 사용자ID로 나머지를 받고, 합계는 계정 하나 몫(30)을 넘지 않는다."""
+    uid = f"guest-{uuid.uuid4()}"
+    credits.ensure_signup(store, User(uid, anonymous=True))
+    assert store.credit_balance(uid) == 3
+    for _ in range(3):
+        credits.ensure_signup(store, User(uid, anonymous=False))
+    assert store.credit_balance(uid) == 30
+
+
+def test_ten_concurrent_messages_at_balance_one():
+    """공격 시험: 잔액 1에서 메시지 10개를 같은 순간에 보내도 1개만 통과한다."""
+    keep = balance()
+    set_balance(1)
+    codes, gate = [], threading.Barrier(10)
+
+    def one():
+        gate.wait()
+        codes.append(client.post("/api/chat", json={"message": "동시에 보내기"}).status_code)
+
+    threads = [threading.Thread(target=one) for _ in range(10)]
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert (codes.count(200), codes.count(402)) == (1, 9)
+        assert balance() == 0
+    finally:
+        set_balance(keep)
 
 
 def test_spend_never_goes_below_zero():

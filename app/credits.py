@@ -4,11 +4,14 @@
 - 답을 만들다 실패하면 지우지 않고 되돌리는 줄(+1)을 쌓는다.
 - 위기 표현에는 크레딧이 0 이어도 차감 없이 안전 응답을 한다(크레딧 안내로 막지 않는다).
 - 처음 온 사용자에게 무료 크레딧을 한 번만 준다(ref signup:사용자ID 가 유일해서 두 번 쌓이지 않는다).
+  게스트는 체험 3개만, 구글 계정에 연결하면 나머지를 준다(ensure_signup 설명 참고).
 """
 import os
 import uuid
 
 from fastapi.responses import JSONResponse
+
+from app.auth import LOCAL_USER
 
 INSUFFICIENT_MESSAGE = "크레딧을 다 썼어요. 크레딧을 충전하면 계속 이야기할 수 있어요."
 
@@ -25,12 +28,27 @@ def product_list():
 
 
 def signup_credits():
+    """계정(구글 연결) 하나가 받는 무료 크레딧 합계."""
     return int(os.environ.get("SIGNUP_CREDITS", "30"))
 
 
-def ensure_signup(store, uid):
-    """처음 온 사용자면 무료 크레딧을 쌓는다. 이미 받았으면 아무 일도 없다."""
-    store.add_credit(uid, signup_credits(), "signup", f"signup:{uid}")
+def guest_credits():
+    """게스트(익명 로그인)가 먼저 받는 체험 크레딧. 게스트는 버튼 한 번으로 새로 만들 수 있어 작게 준다."""
+    return min(int(os.environ.get("GUEST_CREDITS", "3")), signup_credits())
+
+
+def ensure_signup(store, user):
+    """처음 온 사용자에게 무료 크레딧을 쌓는다. ref 가 사용자마다 하나라 같은 사람이 두 번 받지 못한다.
+
+    공격 시험에서 게스트를 새로 만들 때마다 30개를 받을 수 있었다(5명 → 150개). 그래서 나눠 준다.
+    - 게스트: 체험 3개(signup:사용자ID)
+    - 구글 계정에 연결하면(같은 사용자ID, 익명이 아님): 나머지 27개(account:사용자ID). 새 구글 계정은 쉽게 못 만든다
+    - AUTH=none 의 개발용 사용자는 한 명뿐이라 새로 만들 수 없으므로 처음부터 30개
+    """
+    first = signup_credits() if user.id == LOCAL_USER else guest_credits()
+    store.add_credit(user.id, first, "signup", f"signup:{user.id}")
+    if not user.anonymous and signup_credits() > first:
+        store.add_credit(user.id, signup_credits() - first, "account", f"account:{user.id}")
 
 
 def spend(store, uid):
@@ -51,8 +69,9 @@ def insufficient(balance):
                                                   "balance": max(balance, 0)})
 
 
-def summary(store, uid, limit=10):
-    ensure_signup(store, uid)
+def summary(store, user, limit=10):
+    ensure_signup(store, user)
+    uid = user.id
     return {"balance": store.credit_balance(uid),
             "history": [{"delta": r["delta"], "reason": r["reason"], "created_at": r["created_at"]}
                         for r in store.credit_history(uid, limit)]}

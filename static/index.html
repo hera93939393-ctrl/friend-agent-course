@@ -497,7 +497,7 @@ function renderAccount() {
   }
   if (me.anonymous) {
     el.innerHTML = `<div class="id"><span class="dot"></span>게스트로 사용 중</div>
-      ${cfg.google_login ? `<button class="btn google" id="gLink">🔗 구글 계정에 연결</button><button class="btn ghost" id="gLogin">이미 연결한 계정으로 로그인</button>` :
+      ${cfg.google_login ? `<div style="font-size:12px;color:var(--ink-3)">게스트는 체험 크레딧 3개예요. 구글 계정에 연결하면 27개를 더 받아요.</div><button class="btn google" id="gLink">🔗 구글 계정에 연결</button><button class="btn ghost" id="gLogin">이미 연결한 계정으로 로그인</button>` :
         `<div style="font-size:12px;color:var(--ink-3)">이 브라우저에만 저장됩니다.</div>`}`;
     $("#gLink")?.addEventListener("click", linkGoogle);
     $("#gLogin")?.addEventListener("click", loginGoogle);
