@@ -22,6 +22,7 @@ class MemoryStore:
         self.ids = itertools.count(1)
         self.users = {}
         self.ledger, self.credit_refs = [], set()  # 크레딧 원장. ref 는 사용자와 상관없이 하나뿐(Supabase 의 unique 와 같게)
+        self.orders = {}                           # 결제 주문. 주문 번호 → 주문
 
     def _user(self, uid):
         return self.users.setdefault(uid, {
@@ -140,6 +141,28 @@ class MemoryStore:
 
     def credit_history(self, uid, limit):
         return [dict(r) for r in reversed([r for r in self.ledger if r["user_id"] == uid])][:limit]
+
+    # 결제 주문. 상태는 pending 일 때만 바꾼다(요청 두 개가 같은 주문을 동시에 완료하지 못하게)
+    def create_order(self, uid, order_id, product_id, amount, credits):
+        with self.lock:
+            row = {"id": next(self.ids), "order_id": order_id, "user_id": uid, "product_id": product_id,
+                   "amount": amount, "credits": credits, "status": "pending", "payment_key": None,
+                   "approved_at": None, "fail_code": None, "created_at": utcnow()}
+            self.orders[order_id] = row
+            return dict(row)
+
+    def get_order(self, uid, order_id):
+        row = self.orders.get(order_id)
+        return dict(row) if row and row["user_id"] == uid else None
+
+    def finish_order(self, uid, order_id, status, **values):
+        """pending 인 내 주문만 status 로 바꾸고 바뀐 줄을 돌려준다. 이미 바뀌었으면 None."""
+        with self.lock:
+            row = self.orders.get(order_id)
+            if not row or row["user_id"] != uid or row["status"] != "pending":
+                return None
+            row.update(status=status, **values)
+            return dict(row)
 
     def delete_all(self, uid):
         self.users.pop(uid, None)

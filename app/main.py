@@ -20,7 +20,7 @@ from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from app import agent, credits, ocr, tracing, when
+from app import agent, credits, ocr, payments, tracing, when
 from app.auth import Auth, User
 from app.safety import is_crisis
 from app.config import ROOT, load_settings
@@ -105,6 +105,7 @@ def config():
             "supabase_publishable_key": settings.supabase_publishable_key if settings.auth == "supabase" else "",
             "google_login": settings.google_login, "show_turn_panel": settings.show_turn_panel,
             "ocr_enabled": settings.ocr_enabled,
+            "toss_client_key": settings.toss_client_key,  # 클라이언트 키만. 시크릿 키는 여기에 넣지 않는다
             "options": OPTIONS, "cities": list(CITIES)}
 
 
@@ -197,6 +198,56 @@ def chat(req: ChatRequest, user: User = Depends(current_user), model=Depends(get
 def get_credits(user: User = Depends(current_user)):
     """남은 크레딧과 최근 원장 10줄. 화면은 이 값을 보여 주기만 하고, 계산은 서버가 한다."""
     return credits.summary(store, user.id)
+
+
+# ── 크레딧 결제(app/payments.py) ───────────────────────────────────
+
+class OrderRequest(BaseModel):
+    product_id: str  # 화면은 상품 ID 만 보낸다. 금액은 서버 상품표에서 찾는다
+
+
+class ConfirmRequest(BaseModel):
+    paymentKey: str
+    orderId: str
+    amount: int | str  # 비교만 하고, 승인에는 주문에 저장한 금액을 쓴다
+
+
+class FailRequest(BaseModel):
+    code: str = ""
+
+
+def payments_on():
+    if not (settings.toss_client_key and settings.toss_secret_key):
+        raise HTTPException(503, {"error": "payments_off", "message": "지금은 결제를 받을 수 없어요."})
+
+
+@app.get("/api/products")
+def products():
+    return {"products": credits.product_list(), "enabled": bool(settings.toss_client_key and settings.toss_secret_key)}
+
+
+@app.post("/api/orders")
+def create_order(req: OrderRequest, user: User = Depends(current_user)):
+    payments_on()
+    return payments.create(store, user.id, req.product_id)
+
+
+@app.post("/api/payments/confirm")
+def confirm_payment(req: ConfirmRequest, user: User = Depends(current_user)):
+    payments_on()
+    return payments.confirm(store, settings.toss_secret_key, user.id, req.paymentKey, req.orderId, req.amount)
+
+
+@app.post("/api/orders/{order_id}/fail")
+def fail_order(order_id: str, req: FailRequest, user: User = Depends(current_user)):
+    return payments.mark_failed(store, user.id, order_id, req.code)
+
+
+@app.get("/pay/success", response_class=HTMLResponse)
+@app.get("/pay/fail", response_class=HTMLResponse)
+def pay_return():
+    """결제 뒤 돌아오는 주소. 로그인을 다시 쓰려고 같은 화면을 보여 주고, 화면이 주소를 보고 승인·실패를 처리한다."""
+    return home()
 
 
 @app.post("/api/greeting")

@@ -166,6 +166,26 @@ class SupabaseStore:
                          select="id,delta,reason,ref,created_at")
         return [self._credit(row) for row in rows]
 
+    # 결제 주문(supabase/migrations/0003_orders.sql)
+    def _order(self, row):
+        return {**row, "created_at": parse_time(row["created_at"]), "approved_at": parse_time(row.get("approved_at"))}
+
+    def create_order(self, uid, order_id, product_id, amount, credits):
+        return self._order(self._insert("orders", {"order_id": order_id, "user_id": uid, "product_id": product_id,
+                                                   "amount": amount, "credits": credits}))
+
+    def get_order(self, uid, order_id):
+        rows = self._get("orders", user_id=f"eq.{uid}", order_id=f"eq.{order_id}", limit=1)
+        return self._order(rows[0]) if rows else None
+
+    def finish_order(self, uid, order_id, status, **values):
+        """status 가 pending 인 내 주문만 바꾸는 조건부 업데이트. 요청 두 개가 동시에 와도 한쪽만 그 줄을 돌려받는다."""
+        if values.get("approved_at"):
+            values["approved_at"] = iso(values["approved_at"])
+        rows = self._update("orders", {"status": status, **values},
+                            user_id=f"eq.{uid}", order_id=f"eq.{order_id}", status="eq.pending")
+        return self._order(rows[0]) if rows else None
+
     def delete_all(self, uid):
         for table in ("messages", "summaries", "memories", "reminders", "characters", "user_settings"):
             self._delete(table, user_id=f"eq.{uid}")

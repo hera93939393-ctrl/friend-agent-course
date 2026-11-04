@@ -12,6 +12,17 @@ from fastapi.responses import JSONResponse
 
 INSUFFICIENT_MESSAGE = "크레딧을 다 썼어요. 크레딧을 충전하면 계속 이야기할 수 있어요."
 
+# 상품표. 금액과 지급 크레딧은 여기 한 곳에만 둔다. 화면은 상품 ID 만 서버로 보내고, 서버가 이 표에서 찾는다.
+PRODUCTS = {
+    "credits_100": {"name": "해피 크레딧 100개", "amount": 1000, "credits": 100},
+    "credits_550": {"name": "해피 크레딧 550개", "amount": 5000, "credits": 550},
+}
+
+
+def product_list():
+    return [{"id": pid, "name": p["name"], "amount": p["amount"], "credits": p["credits"],
+             "per_credit": round(p["amount"] / p["credits"], 1)} for pid, p in PRODUCTS.items()]
+
 
 def signup_credits():
     return int(os.environ.get("SIGNUP_CREDITS", "30"))
